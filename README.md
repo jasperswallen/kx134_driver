@@ -1,2 +1,5 @@
-## mbed-cmake Example Project
-This project serves as an example for how to use mbed-cmake in a cmake project.  It contains the minimum extra files needed to include mbed-cmake, as well as a small hello world program that you can use to make sure your dev tool setup is working.  It's a good place to start your own projects off of!
+# KX134-1211 Driver
+
+## About
+
+This is a C++ driver for the KX134-1211 tri-axis accelerometer. It was developed on a NUCLEO-H743ZI2 development board with Mbed OS 5

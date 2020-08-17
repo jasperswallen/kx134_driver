@@ -1,2 +1,3 @@
 # command line build folder
 build/
+mbed-cmake-config/

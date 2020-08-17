@@ -10,12 +10,14 @@ include(cmake/UploadMethodConfig.cmake)
 
 include(mbed-cmake/mbed-cmake.cmake)
 
-project(mbed-cmake-test-project LANGUAGES NONE)
+project(KX134-Driver LANGUAGES NONE)
 
 # recurse to subdirectories
 # -------------------------------------------------------------
 
-add_mbed_executable(hello_world HelloWorld.cpp)
+add_subdirectory(KX134)
+add_mbed_executable(kx134_example main.cpp)
+target_link_libraries(kx134_example KX134)
 
 # build report
 # -------------------------------------------------------------
