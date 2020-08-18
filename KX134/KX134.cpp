@@ -86,9 +86,11 @@
 #define KX134_ADP_CNTL18 0x75
 #define KX134_ADP_CNTL19 0x76
 
+#define SPI_FREQ 1000000
+
 KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
              PinName int2, PinName rst)
-    : _spi(mosi, miso, sclk, cs), _int1(int1), _int2(int2), _rst(rst)
+    : _spi(mosi, miso, sclk), _int1(int1), _int2(int2), _cs(cs), _rst(rst)
 {
     printf("Creating KX134-1211\r\n");
 }
@@ -96,12 +98,140 @@ KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
 bool KX134::init()
 {
     printf("Initing KX134-1211\r\n");
+    deselect();
+    _rst.write(0);
 
-    return init_asynch_reading();
+    _rst.write(1);
+    _spi.frequency(SPI_FREQ);
+
+    init_asynch_reading();
+
+    return reset();
 }
 
-bool KX134::init_asynch_reading()
+bool KX134::reset()
 {
-    printf("Initing asynch\r\n");
-    return false;
+    // write registers to start reset
+    uint8_t buf[1];
+    uint8_t data[1] = {0x00};
+    writeRegister(0x7F, data, buf);
+    writeRegister(KX134_ADP_CNTL2, data, buf);
+    data[0] = 0x80;
+    writeRegister(KX134_ADP_CNTL2, data, buf);
+
+    // software reset time
+    wait_us(2000);
+
+    // verify WHO_I_AM
+    uint8_t whoami[5];
+    readRegister(KX134_WHO_AM_I, whoami, 5);
+    printf("WAI: %s\r\n", whoami);
+    printf("0x%X, 0x%X, 0x%X, 0x%X, 0x%X\r\n", whoami[0], whoami[1], whoami[2],
+           whoami[3], whoami[4]);
+
+    if(!(whoami[0] == 0x3D && whoami[1] == 0x4C && whoami[2] == 0x4C &&
+         whoami[3] == 0x46 && whoami[4] == 0x4D))
+    {
+        return false; // WHO_AM_I is incorrect
+    }
+
+    // verify COTR
+    readRegister(KX134_COTR, buf);
+    printf("COTR: 0x%X", buf[0]);
+    if(buf[0] != 0x55)
+    {
+        return false; // COTR is incorrect
+    }
+
+    return true;
+}
+
+/* This example configures and enables the accelerometer to start outputting
+ * sensor data that can be asynchronously read from the output registers.
+ *
+ * Acceleration data can now be read from the XOUT_L, XOUT_H, YOUT_L, YOUT_H,
+ * ZOUT_L, and ZOUT_H registers in 2’s complement format asynchronously. To
+ * reduce the duplicate sensor data, wait at least 1/ODR period before reading
+ * the next sample.
+ */
+void KX134::init_asynch_reading()
+{
+    uint8_t data[1] = {0x00};
+    uint8_t buf[1]; // garbage bit to write to
+    writeRegister(KX134_ADP_CNTL1, data, buf);
+    data[0] = 0x06;
+    writeRegister(KX134_ODCNTL, data, buf);
+    data[0] = 0xC0;
+    writeRegister(KX134_ADP_CNTL1, data, buf);
+}
+
+/* This example configures and enables the accelerometer to start outputting
+ * sensor data with a synchronous signal (DRDY) and data can read from the
+ * output registers.
+ *
+ * If no HW interrupt:
+ * Acceleration data can now be read from the XOUT_L, XOUT_H, YOUT_L, YOUT_H,
+ * ZOUT_L, and ZOUT_H registers in 2’s complement format synchronously when the
+ * DRDY bit is set (0x10) in the Interrupt Status 2 Register (INS2).
+ * if (INS2 & 0x10)
+ * {
+ *     // read output registers
+ * }
+ *
+ * If HW interrupt:
+ * Acceleration data can now be read from the XOUT_L, XOUT_H, YOUT_L, YOUT_H,
+ * ZOUT_L, and ZOUT_H registers in 2’s complement format synchronously following
+ * the rising edge of INT1.
+ */
+void KX134::init_synch_reading(bool init_hw_int)
+{
+    uint8_t data[1] = {0x00};
+    uint8_t buf[1]; // garbage bit to write to
+    writeRegister(KX134_ADP_CNTL1, data, buf);
+    if(init_hw_int)
+    {
+        data[0] = 0x30;
+        writeRegister(KX134_INC1, data, buf);
+        data[0] = 0x10;
+        writeRegister(KX134_INC4, data, buf);
+    }
+    data[0] = 0x06;
+    writeRegister(KX134_ODCNTL, data, buf);
+    data[0] = 0xE0;
+    writeRegister(KX134_ADP_CNTL1, data, buf);
+}
+
+void KX134::deselect()
+{
+    _cs.write(1);
+}
+
+void KX134::select()
+{
+    _spi.lock();
+    _cs.write(0);
+}
+
+void KX134::readRegister(uint8_t addr, uint8_t *buf, int size)
+{
+    select();
+    _spi.write(addr); // select the register
+    for(int i = 0; i < size; ++i)
+    {
+        buf[i] = _spi.write(0x00);
+    }
+    deselect();
+}
+
+void KX134::writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size)
+{
+    select();
+
+    _spi.write(addr); // select register
+    for(int i = 0; i < size; ++i)
+    {
+        buf[i] = _spi.write(data[i]);
+    }
+
+    deselect();
 }

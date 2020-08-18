@@ -25,20 +25,30 @@ class KX134
 
   private:
     SPI _spi;
-    PinName _int1, _int2, _rst;
+    PinName _int1, _int2;
+    DigitalOut _cs;
+    DigitalOut _rst;
 
     // example init sequences
-    bool init_asynch_reading();
-    bool init_synch_reading(bool init_hw_interrupt);
-    bool init_sample_buffer_bfi();
-    bool init_sample_buffer_wmi();
-    bool init_sample_buffer_trigger();
-    bool init_wake_up();
-    bool init_wake_up_and_back_to_sleep();
-    bool init_tilt_pos_face_detect();
-    bool init_face_detect();
-    bool init_tap();
-    bool init_free_fall();
+    void init_asynch_reading();
+    void init_synch_reading(bool init_hw_int);
+    void init_sample_buffer_bfi();
+    void init_sample_buffer_wmi();
+    void init_sample_buffer_trigger();
+    void init_wake_up();
+    void init_wake_up_and_back_to_sleep();
+    void init_tilt_pos_face_detect();
+    void init_face_detect();
+    void init_tap();
+    void init_free_fall();
+
+    bool reset();
+
+    void deselect();
+    void select();
+
+    void readRegister(uint8_t addr, uint8_t *buf, int size = 1);
+    void writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size = 1);
 };
 
 #endif // KX134_H
