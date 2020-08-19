@@ -13,5 +13,19 @@ int main(void)
 {
     KX134 kx134Obj(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS,
                    PIN_INT1, PIN_INT2, PIN_RST);
-    kx134Obj.init();
+
+    if(!kx134Obj.init())
+    {
+        printf("Failed to initialize KX134\r\n");
+    }
+    else
+    {
+        printf("Successfully initialized KX134\r\n");
+    }
+
+    while(1)
+    {
+        kx134Obj.attemptToRead();
+        ThisThread::sleep_for(1000ms);
+    }
 }

@@ -99,25 +99,33 @@ bool KX134::init()
 {
     printf("Initing KX134-1211\r\n");
     deselect();
-    _rst.write(0);
 
-    _rst.write(1);
     _spi.frequency(SPI_FREQ);
+    _spi.format(16, 1); //! not sure about 2nd arg
 
     init_asynch_reading();
 
     return reset();
 }
 
+// debug function
+void KX134::attemptToRead()
+{
+    uint8_t whoami[6];
+    whoami[5] = '\0';
+    readRegister(KX134_WHO_AM_I, whoami, 5);
+    printf("WAI: %s\r\n", whoami);
+    printf("0x%X, 0x%X, 0x%X, 0x%X, 0x%X\r\n", whoami[0], whoami[1], whoami[2],
+           whoami[3], whoami[4]);
+}
+
 bool KX134::reset()
 {
     // write registers to start reset
     uint8_t buf[1];
-    uint8_t data[1] = {0x00};
-    writeRegister(0x7F, data, buf);
-    writeRegister(KX134_ADP_CNTL2, data, buf);
-    data[0] = 0x80;
-    writeRegister(KX134_ADP_CNTL2, data, buf);
+    writeRegisterOneByte(0x7F, 0x00, buf);
+    writeRegisterOneByte(KX134_CNTL2, 0x00, buf);
+    writeRegisterOneByte(KX134_CNTL2, 0x80, buf);
 
     // software reset time
     wait_us(2000);
@@ -146,6 +154,10 @@ bool KX134::reset()
     return true;
 }
 
+/* Example Initializations
+ * ====================================================
+ */
+
 /* This example configures and enables the accelerometer to start outputting
  * sensor data that can be asynchronously read from the output registers.
  *
@@ -156,13 +168,10 @@ bool KX134::reset()
  */
 void KX134::init_asynch_reading()
 {
-    uint8_t data[1] = {0x00};
     uint8_t buf[1]; // garbage bit to write to
-    writeRegister(KX134_ADP_CNTL1, data, buf);
-    data[0] = 0x06;
-    writeRegister(KX134_ODCNTL, data, buf);
-    data[0] = 0xC0;
-    writeRegister(KX134_ADP_CNTL1, data, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xC0, buf);
 }
 
 /* This example configures and enables the accelerometer to start outputting
@@ -185,21 +194,192 @@ void KX134::init_asynch_reading()
  */
 void KX134::init_synch_reading(bool init_hw_int)
 {
-    uint8_t data[1] = {0x00};
     uint8_t buf[1]; // garbage bit to write to
-    writeRegister(KX134_ADP_CNTL1, data, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     if(init_hw_int)
     {
-        data[0] = 0x30;
-        writeRegister(KX134_INC1, data, buf);
-        data[0] = 0x10;
-        writeRegister(KX134_INC4, data, buf);
+        writeRegisterOneByte(KX134_INC1, 0x30, buf);
+        writeRegisterOneByte(KX134_INC4, 0x10, buf);
     }
-    data[0] = 0x06;
-    writeRegister(KX134_ODCNTL, data, buf);
-    data[0] = 0xE0;
-    writeRegister(KX134_ADP_CNTL1, data, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
 }
+
+/* This example configures enables the accelerometer to start outputting sensor
+ * data to the internal buffer until full. When the buffer is full, a hardware
+ * interrupt is generated and data can then be read from the buffer. The mode of
+ * operation is first in, first out (FIFO) below.
+ *
+ * Once a Buffer-Full Interrupt is issued on INT1 pin, acceleration data can
+ * then be read from the Buffer Read (BUF_READ) register at address 0x63 in 2’s
+ * complement format. Since the resolution of the samples data was set to
+ * 16-bit, the data is recorded in the following order: X_L, X_H, Y_L, Y_H, Z_L
+ * and Z_H with the oldest data point read first as the buffer is in FIFO mode.
+ * The full buffer contains 516 bytes of data, which corresponds to 86 unique
+ * acceleration data samples. (Note: With BRES=0 (8-bit resolution), in
+ * BUF_CNTL2, it is possible to collect 171 samples or 513 bytes of data).
+ */
+void KX134::init_sample_buffer_bfi()
+{
+    uint8_t buf[1]; // garbage bit to write to
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_INC1, 0x30, buf);
+    writeRegisterOneByte(KX134_INC4, 0x40, buf);
+    writeRegisterOneByte(KX134_BUF_CNTL2, 0xE0, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
+}
+
+/* This example configures enables the accelerometer to start outputting sensor
+ * data to the internal buffer until a watermark is reached. When the watermark
+ * is reached, a hardware interrupt is generated and data can then be read from
+ * the buffer. The mode of operation is first in, first out (FIFO) below.
+ *
+ * Once a Buffer-Full Interrupt is issued on INT1 pin, acceleration data can
+ * then be read from the Buffer Read (BUF_READ) register at address 0x63 in 2’s
+ * complement format. The data is recorded in the following order: X_L, X_H,
+ * Y_L, Y_H, Z_L and Z_H (16-bit mode) with the oldest data point read first as
+ * the buffer is in FIFO mode. The full buffer contains 258 bytes of data, which
+ * corresponds to 43 unique acceleration data samples.
+ */
+void KX134::init_sample_buffer_wmi()
+{
+    uint8_t buf[1]; // garbage bit to write to
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_INC1, 0x30, buf);
+    writeRegisterOneByte(KX134_INC4, 0x20, buf);
+    writeRegisterOneByte(KX134_BUF_CNTL1, 0x2B, buf);
+    writeRegisterOneByte(KX134_BUF_CNTL2, 0xE0, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
+}
+
+/* This example configures enables the accelerometer to start filling sensor
+ * data to the internal buffer. Prior to a trigger event, once the watermark
+ * setting is reached, old data will be discarded and new data will be added.
+ * Following a trigger event, data will continue to fill until the buffer is
+ * full. A hardware interrupt is generated when the buffer is full and data can
+ * then be read from the buffer. The mode of operation is first in, first out
+ * (FIFO). The purpose of this example is to show how data can be captured both
+ * before and after an event (external trigger, tap, wakeup, freefall).
+ *
+ * Provide some time for the buffer to fill to the configured threshold.
+ * Assuming the default ODR was used, it should take approximately 0.86 seconds.
+ * After this time, trigger a wakeup event by shaking the unit above the
+ * configured threshold and timing settings. Next, wait for the Buffer-Full
+ * Interrupt. Once Buffer-Full Interrupt is issued on INT1 pin, acceleration
+ * data can then be read from the Buffer Read (BUF_READ) register at address
+ * 0x63 in 2’s complement format. Since the resolution of the samples data was
+ * set to 16-bit, both high and low bytes of each sample were stored in the
+ * buffer, and recorded in the following order: X_L, X_H, Y_L, Y_H, Z_L, Z_H
+ * with the oldest data point read first as it is a FIFO buffer. The full buffer
+ * contains 516 bytes of data, which corresponds to 86 unique acceleration data
+ * samples. The data set will include all the data prior to the trigger event,
+ * plus all the data after the event.
+ */
+void KX134::init_sample_buffer_trigger()
+{
+    uint8_t buf[1]; // garbage bit to write to
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_INC1, 0x30, buf);
+    writeRegisterOneByte(KX134_INC4, 0x40, buf);
+    writeRegisterOneByte(KX134_BUF_CNTL1, 0x2B, buf);
+    writeRegisterOneByte(KX134_BUF_CNTL2, 0xE2, buf);
+    writeRegisterOneByte(KX134_INC2, 0x3F, buf);
+    writeRegisterOneByte(KX134_CNTL3, 0xAE, buf);
+    writeRegisterOneByte(KX134_CNTL4, 0x60, buf);
+    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
+    writeRegisterOneByte(KX134_WUFC, 0x05, buf);
+    writeRegisterOneByte(KX134_WUFTH, 0x20,
+                         buf); // unclear in datasheet - either 0x20 or 0x80
+    writeRegisterOneByte(KX134_BTSWUFTH, 0x00, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
+}
+
+/* This example configures and enables the accelerometer to detect wake-up
+ * events using an external interrupt pin with Back-to-Sleep function disabled.
+ *
+ */
+void KX134::init_wake_up()
+{
+    uint8_t buf[1];
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_INC1, 0x30, buf);
+    writeRegisterOneByte(KX134_INC4, 0x02, buf);
+    writeRegisterOneByte(KX134_INC1, 0x3F, buf);
+    writeRegisterOneByte(KX134_CNTL3, 0xAE, buf);
+    writeRegisterOneByte(KX134_CNTL4, 0x60, buf);
+    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
+    writeRegisterOneByte(KX134_WUFC, 0x05, buf);
+    writeRegisterOneByte(KX134_WUFTH, 0x20, buf); // see prev func
+    writeRegisterOneByte(KX134_BTSWUFTH, 0x00, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
+
+    /* Monitor the physical interrupt INT1 of the accelerometer, if the
+     * acceleration input profile satisfies the criteria previously established
+     * for the 0.5g motion detect threshold level in both positive and negative
+     * directions of the X, Y, Z axis for more than 0.1 second, then there
+     * should be positive latched interrupt present. Also, the WUFS bit in
+     * Interrupt Status 3 (INS3) will be set to indicate the wake-up interrupt
+     * has fired. INS3 also provides information regarding which axis/axes
+     * caused the wakeup interrupt. Finally, WAKE bit in Status (STAT) will also
+     * be set to indicate the sensor is in WAKE mode.
+     *
+     * if (INS3 & 0x80)
+     * {
+     *     // handle wakeup event
+     * }
+     */
+
+    readRegister(KX134_INT_REL, buf);
+    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
+}
+void KX134::init_wake_up_and_back_to_sleep()
+{
+    uint8_t buf[1];
+    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
+    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
+    writeRegisterOneByte(KX134_INC1, 0x30, buf);
+    writeRegisterOneByte(KX134_INC4, 0x0A, buf);
+    writeRegisterOneByte(KX134_INC2, 0x3F, buf);
+    writeRegisterOneByte(KX134_CNTL3, 0xAE, buf);
+    writeRegisterOneByte(KX134_CNTL4, 0x76, buf);
+    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
+    writeRegisterOneByte(KX134_BTSC, 0x05, buf);
+    writeRegisterOneByte(KX134_WUFC, 0x05, buf);
+    writeRegisterOneByte(KX134_WUFTH, 0x20, buf); // see above
+    writeRegisterOneByte(KX134_BTSWUFTH, 0x00, buf);
+    writeRegisterOneByte(KX134_BTSTH, 0x20, buf);
+    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
+
+    /* Monitor the physical interrupt INT1 of the accelerometer, if the
+     * acceleration input profile satisfies the criteria previously established
+     * for the 0.5g motion detect threshold level in both positive and negative
+     * directions of the X, Y, Z axis for more than 0.1 second, then there
+     * should be positive latched interrupt present. Also, the WUFS bit in
+     * Interrupt Status 3 (INS3) will be set to indicate the wake-up interrupt
+     * has fired. INS3 also provides information regarding which axis/axes
+     * caused the wakeup interrupt. Finally, WAKE bit in Status (STAT) will also
+     * be set to indicate the sensor is in WAKE mode.
+     *
+     * if (INS3 & 0x80)
+     * {
+     *     // handle wakeup event
+     * }
+     */
+
+    readRegister(KX134_INT_REL, buf);
+}
+void KX134::init_tilt_pos_face_detect() {}
+void KX134::init_face_detect() {}
+void KX134::init_tap() {}
+void KX134::init_free_fall() {}
+
+/* Helper Functions
+ * ====================================================
+ */
 
 void KX134::deselect()
 {
@@ -208,18 +388,20 @@ void KX134::deselect()
 
 void KX134::select()
 {
-    _spi.lock();
+    _spi.select();
     _cs.write(0);
 }
 
 void KX134::readRegister(uint8_t addr, uint8_t *buf, int size)
 {
     select();
+
     _spi.write(addr); // select the register
     for(int i = 0; i < size; ++i)
     {
         buf[i] = _spi.write(0x00);
     }
+
     deselect();
 }
 
@@ -234,4 +416,10 @@ void KX134::writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size)
     }
 
     deselect();
+}
+
+void KX134::writeRegisterOneByte(uint8_t addr, uint8_t data, uint8_t *buf)
+{
+    uint8_t _data[1] = {data};
+    writeRegister(addr, _data, buf);
 }

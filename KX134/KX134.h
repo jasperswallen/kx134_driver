@@ -23,6 +23,8 @@ class KX134
           PinName int2, PinName rst);
     bool init();
 
+    void attemptToRead();
+
   private:
     SPI _spi;
     PinName _int1, _int2;
@@ -49,6 +51,7 @@ class KX134
 
     void readRegister(uint8_t addr, uint8_t *buf, int size = 1);
     void writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size = 1);
+    void writeRegisterOneByte(uint8_t addr, uint8_t data, uint8_t *buf);
 };
 
 #endif // KX134_H
