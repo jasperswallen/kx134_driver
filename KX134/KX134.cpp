@@ -139,21 +139,45 @@ void KX134::attemptToRead()
 
     // deselect();
 
-    select();
+    // select();
 
-    char rx_buf[2];
-    char tx_buff[1] = {KX134_WHO_AM_I};
-    int rsp = _spi.write(tx_buff, 1, rx_buf, 2);
-    printf("0x%X, 0x%X, %i\r\n",
-            rx_buf[0], rx_buf[1], rsp);
+    // char rx_buf[2];
+    // char tx_buff[1] = {KX134_WHO_AM_I | (1 << 7)};
+    // int rsp = _spi.write(tx_buff, 1, rx_buf, 2);
+    // printf("0x%X, 0x%X, %i\r\n", rx_buf[0], rx_buf[1], rsp);
 
-    deselect();
+    // deselect();
+
+    // read from XOUT_L, XOUT_H, YOUT_L, YOUT_H, ZOUT_L, and ZOUT_H registers
+    char xout_l_buf[2];
+    char xout_h_buf[2];
+    char yout_l_buf[2];
+    char yout_h_buf[2];
+    char zout_l_buf[2];
+    char zout_h_buf[2];
+
+    readRegister(KX134_XOUT_L, xout_l_buf);
+    readRegister(KX134_XOUT_H, xout_h_buf);
+    readRegister(KX134_YOUT_L, yout_l_buf);
+    readRegister(KX134_YOUT_H, yout_h_buf);
+    readRegister(KX134_ZOUT_L, zout_l_buf);
+    readRegister(KX134_ZOUT_H, zout_h_buf);
+
+    printf(
+        "x_l: 0x%X, x_h: 0x%X, y_l: 0x%X, y_h: 0x%X, z_l: 0x%X, z_h: 0x%X\r\n",
+        xout_l_buf[1], xout_h_buf[1], yout_l_buf[1], yout_h_buf[1],
+        zout_l_buf[1], zout_h_buf[1]);
+
+    printf("x: %i, y: %i, z: %i\r\n",
+           read16BitValue(KX134_XOUT_L, KX134_XOUT_H),
+           read16BitValue(KX134_YOUT_L, KX134_YOUT_H),
+           read16BitValue(KX134_ZOUT_L, KX134_ZOUT_H));
 }
 
 bool KX134::reset()
 {
     // write registers to start reset
-    uint8_t buf[1];
+    char buf[2];
     writeRegisterOneByte(0x7F, 0x00, buf);
     writeRegisterOneByte(KX134_CNTL2, 0x00, buf);
     writeRegisterOneByte(KX134_CNTL2, 0x80, buf);
@@ -162,22 +186,19 @@ bool KX134::reset()
     wait_us(2000);
 
     // verify WHO_I_AM
-    uint8_t whoami[5];
-    readRegister(KX134_WHO_AM_I, whoami, 5);
-    printf("WAI: %s\r\n", whoami);
-    printf("0x%X, 0x%X, 0x%X, 0x%X, 0x%X\r\n", whoami[0], whoami[1], whoami[2],
-           whoami[3], whoami[4]);
+    char whoami[5];
+    readRegister(KX134_WHO_AM_I, whoami);
+    printf("0x%X, 0x%X\r\n", whoami[0], whoami[1]);
 
-    if(!(whoami[0] == 0x3D && whoami[1] == 0x4C && whoami[2] == 0x4C &&
-         whoami[3] == 0x46 && whoami[4] == 0x4D))
+    if(whoami[1] != 0x46)
     {
         return false; // WHO_AM_I is incorrect
     }
 
     // verify COTR
     readRegister(KX134_COTR, buf);
-    printf("COTR: 0x%X", buf[0]);
-    if(buf[0] != 0x55)
+    printf("COTR: 0x%X, 0x%X\r\n", buf[0], buf[1]);
+    if(buf[1] != 0x55)
     {
         return false; // COTR is incorrect
     }
@@ -199,7 +220,7 @@ bool KX134::reset()
  */
 void KX134::init_asynch_reading()
 {
-    uint8_t buf[1]; // garbage bit to write to
+    char buf[2]; // garbage byte to write to
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
     writeRegisterOneByte(KX134_CNTL1, 0xC0, buf);
@@ -225,7 +246,7 @@ void KX134::init_asynch_reading()
  */
 void KX134::init_synch_reading(bool init_hw_int)
 {
-    uint8_t buf[1]; // garbage bit to write to
+    char buf[2]; // garbage byte to write to
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     if(init_hw_int)
     {
@@ -252,7 +273,7 @@ void KX134::init_synch_reading(bool init_hw_int)
  */
 void KX134::init_sample_buffer_bfi()
 {
-    uint8_t buf[1]; // garbage bit to write to
+    char buf[2]; // garbage byte to write to
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
     writeRegisterOneByte(KX134_INC1, 0x30, buf);
@@ -275,7 +296,7 @@ void KX134::init_sample_buffer_bfi()
  */
 void KX134::init_sample_buffer_wmi()
 {
-    uint8_t buf[1]; // garbage bit to write to
+    char buf[2]; // garbage byte to write to
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
     writeRegisterOneByte(KX134_INC1, 0x30, buf);
@@ -310,7 +331,7 @@ void KX134::init_sample_buffer_wmi()
  */
 void KX134::init_sample_buffer_trigger()
 {
-    uint8_t buf[1]; // garbage bit to write to
+    char buf[2]; // garbage byte to write to
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
     writeRegisterOneByte(KX134_INC1, 0x30, buf);
@@ -334,7 +355,7 @@ void KX134::init_sample_buffer_trigger()
  */
 void KX134::init_wake_up()
 {
-    uint8_t buf[1];
+    char buf[2];
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
     writeRegisterOneByte(KX134_INC1, 0x30, buf);
@@ -369,7 +390,7 @@ void KX134::init_wake_up()
 }
 void KX134::init_wake_up_and_back_to_sleep()
 {
-    uint8_t buf[1];
+    char buf[2];
     writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
     writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
     writeRegisterOneByte(KX134_INC1, 0x30, buf);
@@ -422,20 +443,22 @@ void KX134::select()
     _cs.write(0);
 }
 
-void KX134::readRegister(uint8_t addr, uint8_t *buf, int size)
+/* Read a given register a given number of bytes
+ *
+ * Note: the first byte read should return 0x0, so the data begins at rx_buf[1]
+ */
+void KX134::readRegister(char addr, char *rx_buf, int size)
 {
     select();
 
-    _spi.write(addr); // select the register
-    for(int i = 0; i < size; ++i)
-    {
-        buf[i] = _spi.write(0x00);
-    }
+    char tx_buf[1] = {addr | (1 << 7)};
+
+    _spi.write(tx_buf, 1, rx_buf, size);
 
     deselect();
 }
 
-void KX134::writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size)
+void KX134::writeRegister(uint8_t addr, uint8_t *data, char *buf, int size)
 {
     select();
 
@@ -448,8 +471,23 @@ void KX134::writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size)
     deselect();
 }
 
-void KX134::writeRegisterOneByte(uint8_t addr, uint8_t data, uint8_t *buf)
+void KX134::writeRegisterOneByte(uint8_t addr, uint8_t data, char *buf)
 {
     uint8_t _data[1] = {data};
     writeRegister(addr, _data, buf);
+}
+
+int16_t KX134::read16BitValue(char lowAddr, char highAddr)
+{
+    // get contents of register
+    char lowWord[2], highWord[2];
+    readRegister(lowAddr, lowWord);
+    readRegister(highAddr, highWord);
+
+    // combine low & high words
+    uint16_t val2sComplement =
+        (static_cast<uint16_t>(highWord[1] << 8)) | lowWord[1];
+    int16_t value = static_cast<int16_t>(val2sComplement);
+
+    return value;
 }

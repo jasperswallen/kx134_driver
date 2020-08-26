@@ -17,11 +17,13 @@ int main(void)
     if(!kx134Obj.init())
     {
         printf("Failed to initialize KX134\r\n");
+        return 1;
     }
-    else
-    {
-        printf("Successfully initialized KX134\r\n");
-    }
+
+    printf("Successfully initialized KX134\r\n");
+
+    // initialize asynch reading
+    kx134Obj.init_asynch_reading();
 
     while(1)
     {

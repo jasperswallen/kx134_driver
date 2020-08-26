@@ -25,12 +25,6 @@ class KX134
 
     void attemptToRead();
 
-  private:
-    SPI _spi;
-    PinName _int1, _int2;
-    DigitalOut _cs;
-    DigitalOut _rst;
-
     // example init sequences
     void init_asynch_reading();
     void init_synch_reading(bool init_hw_int);
@@ -44,14 +38,22 @@ class KX134
     void init_tap();
     void init_free_fall();
 
+  private:
+    SPI _spi;
+    PinName _int1, _int2;
+    DigitalOut _cs;
+    DigitalOut _rst;
+
     bool reset();
 
     void deselect();
     void select();
 
-    void readRegister(uint8_t addr, uint8_t *buf, int size = 1);
-    void writeRegister(uint8_t addr, uint8_t *data, uint8_t *buf, int size = 1);
-    void writeRegisterOneByte(uint8_t addr, uint8_t data, uint8_t *buf);
+    void readRegister(char addr, char *buf, int size = 2);
+    void writeRegister(uint8_t addr, uint8_t *data, char *buf, int size = 1);
+    void writeRegisterOneByte(uint8_t addr, uint8_t data, char *buf);
+
+    int16_t read16BitValue(char lowAddr, char highAddr);
 };
 
 #endif // KX134_H
