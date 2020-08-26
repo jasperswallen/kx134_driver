@@ -101,7 +101,7 @@ bool KX134::init()
     deselect();
 
     _spi.frequency(SPI_FREQ);
-    _spi.format(16, 1); //! not sure about 2nd arg
+    _spi.format(16, 0); //! not sure about 2nd arg
 
     init_asynch_reading();
 
@@ -111,12 +111,35 @@ bool KX134::init()
 // debug function
 void KX134::attemptToRead()
 {
-    uint8_t whoami[6];
-    whoami[5] = '\0';
-    readRegister(KX134_WHO_AM_I, whoami, 5);
-    printf("WAI: %s\r\n", whoami);
-    printf("0x%X, 0x%X, 0x%X, 0x%X, 0x%X\r\n", whoami[0], whoami[1], whoami[2],
-           whoami[3], whoami[4]);
+    // uint8_t whoami[6];
+    // whoami[5] = '\0';
+    // readRegister(KX134_MAN_ID, whoami, 5);
+    // printf("WAI: %s\r\n", whoami);
+    // printf("0x%X, 0x%X, 0x%X, 0x%X, 0x%X\r\n", whoami[0], whoami[1],
+    // whoami[2],
+    //        whoami[3], whoami[4]);
+
+    select();
+    int w = _spi.write(KX134_WHO_AM_I), r1 = _spi.write(0x00),
+        r2 = _spi.write(0x00), r3 = _spi.write(0x00), r4 = _spi.write(0x00),
+        r5 = _spi.write(0x00), r6 = _spi.write(0x00), r7 = _spi.write(0x00),
+        r8 = _spi.write(0x00);
+    printf("w: 0x%X r: 0x%X r: 0x%X r: 0x%X r: 0x%X "
+           "r: 0x%X r: 0x%X r: 0x%X r: "
+           "0x%X\r\n",
+           w, r1, r2, r3, r4, r5, r6, r7, r8);
+
+    deselect();
+
+    // select();
+
+    // char buf[8];
+    // char tx_buff[1] = {KX134_WHO_AM_I};
+    // int rsp = _spi.write(tx_buff, 1, buf, 8);
+    // printf("Read: %s: 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X,
+    // 0x%X\r\n",
+    //        buf, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6],
+    //        buf[7], rsp);
 }
 
 bool KX134::reset()
@@ -388,7 +411,6 @@ void KX134::deselect()
 
 void KX134::select()
 {
-    _spi.select();
     _cs.write(0);
 }
 
