@@ -86,13 +86,21 @@
 #define KX134_ADP_CNTL18 0x75
 #define KX134_ADP_CNTL19 0x76
 
-#define SPI_FREQ 1000000
+#define SPI_FREQ 100000
 
 KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
              PinName int2, PinName rst)
     : _spi(mosi, miso, sclk), _int1(int1), _int2(int2), _cs(cs), _rst(rst)
 {
     printf("Creating KX134-1211\r\n");
+
+    // _cs.write(1);
+
+    // ThisThread::sleep_for(5s);
+
+    // _cs.write(0);
+    // ThisThread::sleep_for(5s);
+    deselect();
 }
 
 bool KX134::init()
@@ -101,9 +109,9 @@ bool KX134::init()
     deselect();
 
     _spi.frequency(SPI_FREQ);
-    _spi.format(16, 0); //! not sure about 2nd arg
+    _spi.format(8, 1); //! not sure about
 
-    init_asynch_reading();
+    // init_asynch_reading();
 
     return reset();
 }
@@ -119,27 +127,27 @@ void KX134::attemptToRead()
     // whoami[2],
     //        whoami[3], whoami[4]);
 
+    // select();
+    // int w = _spi.write(KX134_WHO_AM_I), r1 = _spi.write(0x00),
+    //     r2 = _spi.write(0x00), r3 = _spi.write(0x00), r4 = _spi.write(0x00),
+    //     r5 = _spi.write(0x00), r6 = _spi.write(0x00), r7 = _spi.write(0x00),
+    //     r8 = _spi.write(0x00);
+    // printf("w: 0x%X r: 0x%X r: 0x%X r: 0x%X r: 0x%X "
+    //        "r: 0x%X r: 0x%X r: 0x%X r: "
+    //        "0x%X\r\n",
+    //        w, r1, r2, r3, r4, r5, r6, r7, r8);
+
+    // deselect();
+
     select();
-    int w = _spi.write(KX134_WHO_AM_I), r1 = _spi.write(0x00),
-        r2 = _spi.write(0x00), r3 = _spi.write(0x00), r4 = _spi.write(0x00),
-        r5 = _spi.write(0x00), r6 = _spi.write(0x00), r7 = _spi.write(0x00),
-        r8 = _spi.write(0x00);
-    printf("w: 0x%X r: 0x%X r: 0x%X r: 0x%X r: 0x%X "
-           "r: 0x%X r: 0x%X r: 0x%X r: "
-           "0x%X\r\n",
-           w, r1, r2, r3, r4, r5, r6, r7, r8);
+
+    char rx_buf[2];
+    char tx_buff[1] = {KX134_WHO_AM_I};
+    int rsp = _spi.write(tx_buff, 1, rx_buf, 2);
+    printf("0x%X, 0x%X, %i\r\n",
+            rx_buf[0], rx_buf[1], rsp);
 
     deselect();
-
-    // select();
-
-    // char buf[8];
-    // char tx_buff[1] = {KX134_WHO_AM_I};
-    // int rsp = _spi.write(tx_buff, 1, buf, 8);
-    // printf("Read: %s: 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X, 0x%X,
-    // 0x%X\r\n",
-    //        buf, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6],
-    //        buf[7], rsp);
 }
 
 bool KX134::reset()
