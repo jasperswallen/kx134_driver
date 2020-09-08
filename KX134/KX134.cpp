@@ -133,7 +133,7 @@ bool KX134::init()
     deselect();
 
     _spi.frequency(SPI_FREQ);
-    _spi.format(8, 1); //! not sure about
+    _spi.format(8, 1);
 
     return reset();
 }
@@ -188,9 +188,12 @@ void KX134::readRegister(char addr, char *rx_buf, int size)
 {
     select();
 
-    char tx_buf[1] = {addr | (1 << 7)};
+    rx_buf[0] = _spi.write(addr | (1 << 7));
 
-    _spi.write(tx_buf, 1, rx_buf, size);
+    for(int i = 1; i < size; ++i)
+    {
+        rx_buf[i] = _spi.write(0x00);
+    }
 
     deselect();
 }
@@ -456,4 +459,21 @@ void KX134::enableRegisterWriting()
 {
     writeRegisterOneByte(KX134_CNTL1, 0x00);
     registerWritingEnabled = 1;
+}
+
+void KX134::disableRegisterWriting()
+{
+    if(!registerWritingEnabled)
+    {
+        return;
+    }
+
+    uint8_t writeByte = (0 << 7) | (resStatus << 6) | (drdyeStatus << 5) |
+                        (gsel1Status << 4) | (gsel0Status << 3) |
+                        (tdteStatus << 2) | (tpeStatus);
+    // reserved bit 1, PC1 bit must be enabled
+
+    writeRegisterOneByte(KX134_CNTL1, writeByte);
+
+    registerWritingEnabled = 0;
 }

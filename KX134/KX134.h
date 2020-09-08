@@ -58,6 +58,11 @@ class KX134
      */
     void enableRegisterWriting();
 
+    /* Saves settings as currently set and disables register writing.
+     * Useful for state changes
+     */
+    void disableRegisterWriting();
+
     // Set acceleration range (8, 16, 32, or 64 gs)
     void setAccelRange(int range);
 
