@@ -88,18 +88,42 @@
 
 #define SPI_FREQ 100000
 
+char defaultBuffer[2] = {0}; // allows calling writeRegisterOneByte
+                             // without buf argument
+
+/* Writes one byte to a register
+ */
+void KX134::writeRegisterOneByte(uint8_t addr, uint8_t data,
+                                 char *buf = defaultBuffer)
+{
+    uint8_t _data[1] = {data};
+    writeRegister(addr, _data, buf);
+}
+
 KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
              PinName int2, PinName rst)
     : _spi(mosi, miso, sclk), _int1(int1), _int2(int2), _cs(cs), _rst(rst)
 {
     printf("Creating KX134-1211\r\n");
 
-    // _cs.write(1);
+    // set default values for settings variables
+    resStatus = 1;   // high performance mode
+    drdyeStatus = 0; // Data Ready Engine disabled
+    gsel1Status = 0; // +-8g bit 1
+    gsel0Status = 0; // +-8g bit 0
+    tdteStatus = 0;  // Tap/Double-Tap engine disabled
+    tpeStatus = 0;   // Tilt Position Engine disabled
 
-    // ThisThread::sleep_for(5s);
+    iirBypass = 0; // IIR filter is not bypassed, i.e. filtering is applied
+    lpro = 0;      // IIR filter corner frequency set to ODR/9
+    fstup = 0;     // Fast Start is disabled
+    osa3 = 0;      // Output Data Rate bits
+    osa2 = 1;      // default is 50hz
+    osa1 = 1;
+    osa0 = 0;
 
-    // _cs.write(0);
-    // ThisThread::sleep_for(5s);
+    registerWritingEnabled = 0;
+
     deselect();
 }
 
@@ -111,76 +135,15 @@ bool KX134::init()
     _spi.frequency(SPI_FREQ);
     _spi.format(8, 1); //! not sure about
 
-    // init_asynch_reading();
-
     return reset();
-}
-
-// debug function
-void KX134::attemptToRead()
-{
-    // uint8_t whoami[6];
-    // whoami[5] = '\0';
-    // readRegister(KX134_MAN_ID, whoami, 5);
-    // printf("WAI: %s\r\n", whoami);
-    // printf("0x%X, 0x%X, 0x%X, 0x%X, 0x%X\r\n", whoami[0], whoami[1],
-    // whoami[2],
-    //        whoami[3], whoami[4]);
-
-    // select();
-    // int w = _spi.write(KX134_WHO_AM_I), r1 = _spi.write(0x00),
-    //     r2 = _spi.write(0x00), r3 = _spi.write(0x00), r4 = _spi.write(0x00),
-    //     r5 = _spi.write(0x00), r6 = _spi.write(0x00), r7 = _spi.write(0x00),
-    //     r8 = _spi.write(0x00);
-    // printf("w: 0x%X r: 0x%X r: 0x%X r: 0x%X r: 0x%X "
-    //        "r: 0x%X r: 0x%X r: 0x%X r: "
-    //        "0x%X\r\n",
-    //        w, r1, r2, r3, r4, r5, r6, r7, r8);
-
-    // deselect();
-
-    // select();
-
-    // char rx_buf[2];
-    // char tx_buff[1] = {KX134_WHO_AM_I | (1 << 7)};
-    // int rsp = _spi.write(tx_buff, 1, rx_buf, 2);
-    // printf("0x%X, 0x%X, %i\r\n", rx_buf[0], rx_buf[1], rsp);
-
-    // deselect();
-
-    // read from XOUT_L, XOUT_H, YOUT_L, YOUT_H, ZOUT_L, and ZOUT_H registers
-    char xout_l_buf[2];
-    char xout_h_buf[2];
-    char yout_l_buf[2];
-    char yout_h_buf[2];
-    char zout_l_buf[2];
-    char zout_h_buf[2];
-
-    readRegister(KX134_XOUT_L, xout_l_buf);
-    readRegister(KX134_XOUT_H, xout_h_buf);
-    readRegister(KX134_YOUT_L, yout_l_buf);
-    readRegister(KX134_YOUT_H, yout_h_buf);
-    readRegister(KX134_ZOUT_L, zout_l_buf);
-    readRegister(KX134_ZOUT_H, zout_h_buf);
-
-    printf(
-        "x_l: 0x%X, x_h: 0x%X, y_l: 0x%X, y_h: 0x%X, z_l: 0x%X, z_h: 0x%X\r\n",
-        xout_l_buf[1], xout_h_buf[1], yout_l_buf[1], yout_h_buf[1],
-        zout_l_buf[1], zout_h_buf[1]);
-
-    printf("x: %i, y: %i, z: %i\r\n",
-           read16BitValue(KX134_XOUT_L, KX134_XOUT_H),
-           read16BitValue(KX134_YOUT_L, KX134_YOUT_H),
-           read16BitValue(KX134_ZOUT_L, KX134_ZOUT_H));
 }
 
 bool KX134::reset()
 {
     // write registers to start reset
-    char buf[2];
-    writeRegisterOneByte(0x7F, 0x00, buf);
-    writeRegisterOneByte(KX134_CNTL2, 0x00, buf);
-    writeRegisterOneByte(KX134_CNTL2, 0x80, buf);
+    writeRegisterOneByte(0x7F, 0x00);
+    writeRegisterOneByte(KX134_CNTL2, 0x00);
+    writeRegisterOneByte(KX134_CNTL2, 0x80);
 
     // software reset time
     wait_us(2000);
@@ -188,7 +151,7 @@ bool KX134::reset()
     // verify WHO_I_AM
     char whoami[5];
     readRegister(KX134_WHO_AM_I, whoami);
-    printf("0x%X, 0x%X\r\n", whoami[0], whoami[1]);
+    printf("WHO_AM_I: 0x%X, 0x%X\r\n", whoami[0], whoami[1]);
 
     if(whoami[1] != 0x46)
     {
@@ -196,238 +159,16 @@ bool KX134::reset()
     }
 
     // verify COTR
-    readRegister(KX134_COTR, buf);
-    printf("COTR: 0x%X, 0x%X\r\n", buf[0], buf[1]);
-    if(buf[1] != 0x55)
+    char cotr[2];
+    readRegister(KX134_COTR, cotr);
+    printf("COTR: 0x%X, 0x%X\r\n", cotr[0], cotr[1]);
+    if(cotr[1] != 0x55)
     {
         return false; // COTR is incorrect
     }
 
     return true;
 }
-
-/* Example Initializations
- * ====================================================
- */
-
-/* This example configures and enables the accelerometer to start outputting
- * sensor data that can be asynchronously read from the output registers.
- *
- * Acceleration data can now be read from the XOUT_L, XOUT_H, YOUT_L, YOUT_H,
- * ZOUT_L, and ZOUT_H registers in 2’s complement format asynchronously. To
- * reduce the duplicate sensor data, wait at least 1/ODR period before reading
- * the next sample.
- */
-void KX134::init_asynch_reading()
-{
-    char buf[2]; // garbage byte to write to
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xC0, buf);
-}
-
-/* This example configures and enables the accelerometer to start outputting
- * sensor data with a synchronous signal (DRDY) and data can read from the
- * output registers.
- *
- * If no HW interrupt:
- * Acceleration data can now be read from the XOUT_L, XOUT_H, YOUT_L, YOUT_H,
- * ZOUT_L, and ZOUT_H registers in 2’s complement format synchronously when the
- * DRDY bit is set (0x10) in the Interrupt Status 2 Register (INS2).
- * if (INS2 & 0x10)
- * {
- *     // read output registers
- * }
- *
- * If HW interrupt:
- * Acceleration data can now be read from the XOUT_L, XOUT_H, YOUT_L, YOUT_H,
- * ZOUT_L, and ZOUT_H registers in 2’s complement format synchronously following
- * the rising edge of INT1.
- */
-void KX134::init_synch_reading(bool init_hw_int)
-{
-    char buf[2]; // garbage byte to write to
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    if(init_hw_int)
-    {
-        writeRegisterOneByte(KX134_INC1, 0x30, buf);
-        writeRegisterOneByte(KX134_INC4, 0x10, buf);
-    }
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
-}
-
-/* This example configures enables the accelerometer to start outputting sensor
- * data to the internal buffer until full. When the buffer is full, a hardware
- * interrupt is generated and data can then be read from the buffer. The mode of
- * operation is first in, first out (FIFO) below.
- *
- * Once a Buffer-Full Interrupt is issued on INT1 pin, acceleration data can
- * then be read from the Buffer Read (BUF_READ) register at address 0x63 in 2’s
- * complement format. Since the resolution of the samples data was set to
- * 16-bit, the data is recorded in the following order: X_L, X_H, Y_L, Y_H, Z_L
- * and Z_H with the oldest data point read first as the buffer is in FIFO mode.
- * The full buffer contains 516 bytes of data, which corresponds to 86 unique
- * acceleration data samples. (Note: With BRES=0 (8-bit resolution), in
- * BUF_CNTL2, it is possible to collect 171 samples or 513 bytes of data).
- */
-void KX134::init_sample_buffer_bfi()
-{
-    char buf[2]; // garbage byte to write to
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_INC1, 0x30, buf);
-    writeRegisterOneByte(KX134_INC4, 0x40, buf);
-    writeRegisterOneByte(KX134_BUF_CNTL2, 0xE0, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
-}
-
-/* This example configures enables the accelerometer to start outputting sensor
- * data to the internal buffer until a watermark is reached. When the watermark
- * is reached, a hardware interrupt is generated and data can then be read from
- * the buffer. The mode of operation is first in, first out (FIFO) below.
- *
- * Once a Buffer-Full Interrupt is issued on INT1 pin, acceleration data can
- * then be read from the Buffer Read (BUF_READ) register at address 0x63 in 2’s
- * complement format. The data is recorded in the following order: X_L, X_H,
- * Y_L, Y_H, Z_L and Z_H (16-bit mode) with the oldest data point read first as
- * the buffer is in FIFO mode. The full buffer contains 258 bytes of data, which
- * corresponds to 43 unique acceleration data samples.
- */
-void KX134::init_sample_buffer_wmi()
-{
-    char buf[2]; // garbage byte to write to
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_INC1, 0x30, buf);
-    writeRegisterOneByte(KX134_INC4, 0x20, buf);
-    writeRegisterOneByte(KX134_BUF_CNTL1, 0x2B, buf);
-    writeRegisterOneByte(KX134_BUF_CNTL2, 0xE0, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
-}
-
-/* This example configures enables the accelerometer to start filling sensor
- * data to the internal buffer. Prior to a trigger event, once the watermark
- * setting is reached, old data will be discarded and new data will be added.
- * Following a trigger event, data will continue to fill until the buffer is
- * full. A hardware interrupt is generated when the buffer is full and data can
- * then be read from the buffer. The mode of operation is first in, first out
- * (FIFO). The purpose of this example is to show how data can be captured both
- * before and after an event (external trigger, tap, wakeup, freefall).
- *
- * Provide some time for the buffer to fill to the configured threshold.
- * Assuming the default ODR was used, it should take approximately 0.86 seconds.
- * After this time, trigger a wakeup event by shaking the unit above the
- * configured threshold and timing settings. Next, wait for the Buffer-Full
- * Interrupt. Once Buffer-Full Interrupt is issued on INT1 pin, acceleration
- * data can then be read from the Buffer Read (BUF_READ) register at address
- * 0x63 in 2’s complement format. Since the resolution of the samples data was
- * set to 16-bit, both high and low bytes of each sample were stored in the
- * buffer, and recorded in the following order: X_L, X_H, Y_L, Y_H, Z_L, Z_H
- * with the oldest data point read first as it is a FIFO buffer. The full buffer
- * contains 516 bytes of data, which corresponds to 86 unique acceleration data
- * samples. The data set will include all the data prior to the trigger event,
- * plus all the data after the event.
- */
-void KX134::init_sample_buffer_trigger()
-{
-    char buf[2]; // garbage byte to write to
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_INC1, 0x30, buf);
-    writeRegisterOneByte(KX134_INC4, 0x40, buf);
-    writeRegisterOneByte(KX134_BUF_CNTL1, 0x2B, buf);
-    writeRegisterOneByte(KX134_BUF_CNTL2, 0xE2, buf);
-    writeRegisterOneByte(KX134_INC2, 0x3F, buf);
-    writeRegisterOneByte(KX134_CNTL3, 0xAE, buf);
-    writeRegisterOneByte(KX134_CNTL4, 0x60, buf);
-    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
-    writeRegisterOneByte(KX134_WUFC, 0x05, buf);
-    writeRegisterOneByte(KX134_WUFTH, 0x20,
-                         buf); // unclear in datasheet - either 0x20 or 0x80
-    writeRegisterOneByte(KX134_BTSWUFTH, 0x00, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
-}
-
-/* This example configures and enables the accelerometer to detect wake-up
- * events using an external interrupt pin with Back-to-Sleep function disabled.
- *
- */
-void KX134::init_wake_up()
-{
-    char buf[2];
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_INC1, 0x30, buf);
-    writeRegisterOneByte(KX134_INC4, 0x02, buf);
-    writeRegisterOneByte(KX134_INC1, 0x3F, buf);
-    writeRegisterOneByte(KX134_CNTL3, 0xAE, buf);
-    writeRegisterOneByte(KX134_CNTL4, 0x60, buf);
-    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
-    writeRegisterOneByte(KX134_WUFC, 0x05, buf);
-    writeRegisterOneByte(KX134_WUFTH, 0x20, buf); // see prev func
-    writeRegisterOneByte(KX134_BTSWUFTH, 0x00, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
-
-    /* Monitor the physical interrupt INT1 of the accelerometer, if the
-     * acceleration input profile satisfies the criteria previously established
-     * for the 0.5g motion detect threshold level in both positive and negative
-     * directions of the X, Y, Z axis for more than 0.1 second, then there
-     * should be positive latched interrupt present. Also, the WUFS bit in
-     * Interrupt Status 3 (INS3) will be set to indicate the wake-up interrupt
-     * has fired. INS3 also provides information regarding which axis/axes
-     * caused the wakeup interrupt. Finally, WAKE bit in Status (STAT) will also
-     * be set to indicate the sensor is in WAKE mode.
-     *
-     * if (INS3 & 0x80)
-     * {
-     *     // handle wakeup event
-     * }
-     */
-
-    readRegister(KX134_INT_REL, buf);
-    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
-}
-void KX134::init_wake_up_and_back_to_sleep()
-{
-    char buf[2];
-    writeRegisterOneByte(KX134_CNTL1, 0x00, buf);
-    writeRegisterOneByte(KX134_ODCNTL, 0x06, buf);
-    writeRegisterOneByte(KX134_INC1, 0x30, buf);
-    writeRegisterOneByte(KX134_INC4, 0x0A, buf);
-    writeRegisterOneByte(KX134_INC2, 0x3F, buf);
-    writeRegisterOneByte(KX134_CNTL3, 0xAE, buf);
-    writeRegisterOneByte(KX134_CNTL4, 0x76, buf);
-    writeRegisterOneByte(KX134_CNTL5, 0x01, buf);
-    writeRegisterOneByte(KX134_BTSC, 0x05, buf);
-    writeRegisterOneByte(KX134_WUFC, 0x05, buf);
-    writeRegisterOneByte(KX134_WUFTH, 0x20, buf); // see above
-    writeRegisterOneByte(KX134_BTSWUFTH, 0x00, buf);
-    writeRegisterOneByte(KX134_BTSTH, 0x20, buf);
-    writeRegisterOneByte(KX134_CNTL1, 0xE0, buf);
-
-    /* Monitor the physical interrupt INT1 of the accelerometer, if the
-     * acceleration input profile satisfies the criteria previously established
-     * for the 0.5g motion detect threshold level in both positive and negative
-     * directions of the X, Y, Z axis for more than 0.1 second, then there
-     * should be positive latched interrupt present. Also, the WUFS bit in
-     * Interrupt Status 3 (INS3) will be set to indicate the wake-up interrupt
-     * has fired. INS3 also provides information regarding which axis/axes
-     * caused the wakeup interrupt. Finally, WAKE bit in Status (STAT) will also
-     * be set to indicate the sensor is in WAKE mode.
-     *
-     * if (INS3 & 0x80)
-     * {
-     *     // handle wakeup event
-     * }
-     */
-
-    readRegister(KX134_INT_REL, buf);
-}
-void KX134::init_tilt_pos_face_detect() {}
-void KX134::init_face_detect() {}
-void KX134::init_tap() {}
-void KX134::init_free_fall() {}
 
 /* Helper Functions
  * ====================================================
@@ -443,10 +184,6 @@ void KX134::select()
     _cs.write(0);
 }
 
-/* Read a given register a given number of bytes
- *
- * Note: the first byte read should return 0x0, so the data begins at rx_buf[1]
- */
 void KX134::readRegister(char addr, char *rx_buf, int size)
 {
     select();
@@ -458,25 +195,22 @@ void KX134::readRegister(char addr, char *rx_buf, int size)
     deselect();
 }
 
-void KX134::writeRegister(uint8_t addr, uint8_t *data, char *buf, int size)
+void KX134::writeRegister(uint8_t addr, uint8_t *data, char *rx_buf, int size)
 {
     select();
 
     _spi.write(addr); // select register
     for(int i = 0; i < size; ++i)
     {
-        buf[i] = _spi.write(data[i]);
+        rx_buf[i] = _spi.write(data[i]);
     }
 
     deselect();
 }
 
-void KX134::writeRegisterOneByte(uint8_t addr, uint8_t data, char *buf)
-{
-    uint8_t _data[1] = {data};
-    writeRegister(addr, _data, buf);
-}
-
+/* Returns a 16 bit signed integer representation of a 2 address read
+ * Assumes 2s Complement
+ */
 int16_t KX134::read16BitValue(char lowAddr, char highAddr)
 {
     // get contents of register
@@ -490,4 +224,236 @@ int16_t KX134::read16BitValue(char lowAddr, char highAddr)
     int16_t value = static_cast<int16_t>(val2sComplement);
 
     return value;
+}
+
+float KX134::convertRawToGravs(int16_t lsbValue)
+{
+    if(gsel1Status && gsel0Status)
+    {
+        // +-64g
+        return (float)lsbValue * 0.00195f;
+    }
+    else if(gsel1Status && !gsel0Status)
+    {
+        // +-32g
+        return (float)lsbValue * 0.00098f;
+    }
+    else if(!gsel1Status && gsel0Status)
+    {
+        // +-16g
+        return (float)lsbValue * 0.00049f;
+    }
+    else if(!gsel1Status && !gsel0Status)
+    {
+        // +-8g
+        return (float)lsbValue * 0.00024f;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+void KX134::getAccelerations(int16_t *output)
+{
+    // read X, Y, and Z
+    output[0] = read16BitValue(KX134_XOUT_L, KX134_XOUT_H);
+    output[1] = read16BitValue(KX134_YOUT_L, KX134_YOUT_H);
+    output[2] = read16BitValue(KX134_ZOUT_L, KX134_ZOUT_H);
+}
+
+bool KX134::checkExistence()
+{
+    // verify WHO_I_AM
+    char whoami[5];
+    readRegister(KX134_WHO_AM_I, whoami);
+    printf("0x%X, 0x%X\r\n", whoami[0], whoami[1]);
+
+    if(whoami[1] != 0x46)
+    {
+        return false; // WHO_AM_I is incorrect
+    }
+
+    // verify COTR
+    char cotr[2];
+    readRegister(KX134_COTR, cotr);
+    printf("COTR: 0x%X, 0x%X\r\n", cotr[0], cotr[1]);
+    if(cotr[1] != 0x55)
+    {
+        return false; // COTR is incorrect
+    }
+
+    return true;
+}
+
+void KX134::setAccelRange(int range)
+{
+    switch(range)
+    {
+        case 8:
+            gsel1Status = 0;
+            gsel0Status = 0;
+            break;
+        case 16:
+            gsel1Status = 0;
+            gsel0Status = 1;
+            break;
+        case 32:
+            gsel1Status = 1;
+            gsel0Status = 0;
+            break;
+        case 64:
+            gsel1Status = 1;
+            gsel0Status = 1;
+            break;
+
+        default:
+            return;
+    }
+
+    uint8_t writeByte = (1 << 7) | (resStatus << 6) | (drdyeStatus << 5) |
+                        (gsel1Status << 4) | (gsel0Status << 3) |
+                        (tdteStatus << 2) | (tpeStatus);
+    // reserved bit 1, PC1 bit must be enabled
+
+    writeRegisterOneByte(KX134_CNTL1, writeByte);
+
+    registerWritingEnabled = 0;
+}
+
+void KX134::setOutputDataRate(float hz)
+{
+    if(!registerWritingEnabled)
+    {
+        return;
+    }
+
+    if(hz == 0.781)
+    {
+        osa3 = 0;
+        osa2 = 0;
+        osa1 = 0;
+        osa0 = 0;
+    }
+    else if(hz == 1.563)
+    {
+        osa3 = 0;
+        osa2 = 0;
+        osa1 = 0;
+        osa0 = 1;
+    }
+    else if(hz == 3.125)
+    {
+        osa3 = 0;
+        osa2 = 0;
+        osa1 = 1;
+        osa0 = 0;
+    }
+    else if(hz == 6.25)
+    {
+        osa3 = 0;
+        osa2 = 0;
+        osa1 = 1;
+        osa0 = 1;
+    }
+    else if(hz == 12.5)
+    {
+        osa3 = 0;
+        osa2 = 1;
+        osa1 = 0;
+        osa0 = 0;
+    }
+    else if(hz == 25)
+    {
+        osa3 = 0;
+        osa2 = 1;
+        osa1 = 0;
+        osa0 = 1;
+    }
+    else if(hz == 50)
+    {
+        osa3 = 0;
+        osa2 = 1;
+        osa1 = 1;
+        osa0 = 0;
+    }
+    else if(hz == 100)
+    {
+        osa3 = 0;
+        osa2 = 1;
+        osa1 = 1;
+        osa0 = 1;
+    }
+    else if(hz == 200)
+    {
+        osa3 = 1;
+        osa2 = 0;
+        osa1 = 0;
+        osa0 = 0;
+    }
+    else if(hz == 400)
+    {
+        osa3 = 1;
+        osa2 = 0;
+        osa1 = 0;
+        osa0 = 1;
+    }
+    else if(hz == 800) // available in high-performance mode only
+    {
+        osa3 = 1;
+        osa2 = 0;
+        osa1 = 1;
+        osa0 = 0;
+    }
+    else if(hz == 1600) // available in high-performance mode only
+    {
+        osa3 = 1;
+        osa2 = 0;
+        osa1 = 1;
+        osa0 = 1;
+    }
+    else if(hz == 3200) // available in high-performance mode only
+    {
+        osa3 = 1;
+        osa2 = 1;
+        osa1 = 0;
+        osa0 = 0;
+    }
+    else if(hz == 6400) // available in high-performance mode only
+    {
+        osa3 = 1;
+        osa2 = 1;
+        osa1 = 0;
+        osa0 = 1;
+    }
+    else if(hz == 12800) // available in high-performance mode only
+    {
+        osa3 = 1;
+        osa2 = 1;
+        osa1 = 1;
+        osa0 = 0;
+    }
+    else if(hz == 25600) // available in high-performance mode only
+    {
+        osa3 = 1;
+        osa2 = 1;
+        osa1 = 1;
+        osa0 = 1;
+    }
+    else
+    {
+        return;
+    }
+
+    uint8_t writeByte = (iirBypass << 7) | (lpro << 6) | (fstup << 5) |
+                        (osa3 << 3) | (osa2 << 2) | (osa1 << 1) | osa0;
+    // reserved bit 4
+
+    writeRegisterOneByte(KX134_ODCNTL, writeByte);
+}
+
+void KX134::enableRegisterWriting()
+{
+    writeRegisterOneByte(KX134_CNTL1, 0x00);
+    registerWritingEnabled = 1;
 }
