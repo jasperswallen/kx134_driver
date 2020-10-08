@@ -25,7 +25,7 @@ int main(void)
 
     printf("Successfully initialized KX134\r\n");
 
-    int hz = 6400;
+    int hz = 25600;
 
     // initialize asynch reading
     kx134Obj.enableRegisterWriting();

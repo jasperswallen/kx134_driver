@@ -121,6 +121,8 @@ class KX134
     KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
           PinName int2, PinName rst);
 
+    ~KX134();
+
     bool init();
 
     /* Converts a LSB value to gravs
@@ -194,14 +196,14 @@ class KX134
      * Note: the first byte read should return 0x0, so the data begins at
      * rx_buf[1]
      */
-    void readRegister(Register addr, char *rx_buf, int size = 2);
+    void readRegister(Register addr, uint8_t *rx_buf, int size = 2);
 
     /* Writes a given register a given number of bytes
      *
      * Note: the first byte read should return 0x0, so the data begins at
      * rx_buf[1]
      */
-    void writeRegister(Register addr, uint8_t *data, char *rx_buf,
+    void writeRegister(Register addr, uint8_t *data, uint8_t *rx_buf,
                        int size = 1);
 
     /* Writes a given register 1 byte (convenience function, calls
@@ -210,12 +212,17 @@ class KX134
      * Note: the first byte read should return 0x0, so the data begins at
      * rx_buf[1]
      */
-    void writeRegisterOneByte(Register addr, uint8_t data, char *buf);
+    void writeRegisterOneByte(Register addr, uint8_t data, uint8_t *buf);
 
     /* Reads a value from a low and high address and combines them to create a
      * signed (2s complement) 16-bit integer
      */
     int16_t read16BitValue(Register lowAddr, Register highAddr);
+
+    /* Converts 2 8-bit unsigned integers to a single signed 16-bit (2s
+     * complement) integer
+     */
+    int16_t convertTo16BitValue(uint8_t low, uint8_t high);
 
     // Settings variables
 

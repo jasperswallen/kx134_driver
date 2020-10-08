@@ -3,13 +3,13 @@
 
 #define SPI_FREQ 100000
 
-char defaultBuffer[2] = {0}; // allows calling writeRegisterOneByte
-                             // without buf argument
+static uint8_t defaultBuffer[2] = {0}; // allows calling writeRegisterOneByte
+                                       // without buf argument
 
 /* Writes one byte to a register
  */
 void KX134::writeRegisterOneByte(Register addr, uint8_t data,
-                                 char *buf = defaultBuffer)
+                                 uint8_t *buf = defaultBuffer)
 {
     uint8_t _data[1] = {data};
     writeRegister(addr, _data, buf);
@@ -38,6 +38,11 @@ KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
     registerWritingEnabled = 0;
 
     deselect();
+}
+
+KX134::~KX134()
+{
+    printf("%d %d %d %d\r\n", osa3, osa2, osa1, osa0);
 }
 
 bool KX134::init()
@@ -78,7 +83,7 @@ void KX134::select()
     _cs.write(0);
 }
 
-void KX134::readRegister(Register addr, char *rx_buf, int size)
+void KX134::readRegister(Register addr, uint8_t *rx_buf, int size)
 {
     select();
 
@@ -92,7 +97,8 @@ void KX134::readRegister(Register addr, char *rx_buf, int size)
     deselect();
 }
 
-void KX134::writeRegister(Register addr, uint8_t *data, char *rx_buf, int size)
+void KX134::writeRegister(Register addr, uint8_t *data, uint8_t *rx_buf,
+                          int size)
 {
     select();
 
@@ -105,19 +111,20 @@ void KX134::writeRegister(Register addr, uint8_t *data, char *rx_buf, int size)
     deselect();
 }
 
-/* Returns a 16 bit signed integer representation of a 2 address read
- * Assumes 2s Complement
- */
 int16_t KX134::read16BitValue(Register lowAddr, Register highAddr)
 {
     // get contents of register
-    char lowWord[2], highWord[2];
+    uint8_t lowWord[2], highWord[2];
     readRegister(lowAddr, lowWord);
     readRegister(highAddr, highWord);
 
+    return convertTo16BitValue(lowWord[1], highWord[1]);
+}
+
+int16_t KX134::convertTo16BitValue(uint8_t low, uint8_t high)
+{
     // combine low & high words
-    uint16_t val2sComplement =
-        (static_cast<uint16_t>(highWord[1] << 8)) | lowWord[1];
+    uint16_t val2sComplement = (static_cast<uint16_t>(high << 8)) | low;
     int16_t value = static_cast<int16_t>(val2sComplement);
 
     return value;
@@ -153,16 +160,22 @@ float KX134::convertRawToGravs(int16_t lsbValue)
 
 void KX134::getAccelerations(int16_t *output)
 {
-    // read X, Y, and Z
-    output[0] = read16BitValue(Register::XOUT_L, Register::XOUT_H);
-    output[1] = read16BitValue(Register::YOUT_L, Register::YOUT_H);
-    output[2] = read16BitValue(Register::ZOUT_L, Register::ZOUT_H);
+    uint8_t words[7];
+
+    // this was the recommended method by Kionix
+    // for some reason, this has *significantly* less noise than reading
+    // one-by-one
+    readRegister(Register::XOUT_L, words, 7);
+
+    output[0] = convertTo16BitValue(words[1], words[2]);
+    output[1] = convertTo16BitValue(words[3], words[4]);
+    output[2] = convertTo16BitValue(words[5], words[6]);
 }
 
 bool KX134::checkExistence()
 {
     // verify WHO_I_AM
-    char whoami[5];
+    uint8_t whoami[2];
     readRegister(Register::WHO_AM_I, whoami);
 
     if(whoami[1] != 0x46)
@@ -171,7 +184,7 @@ bool KX134::checkExistence()
     }
 
     // verify COTR
-    char cotr[2];
+    uint8_t cotr[2];
     readRegister(Register::COTR, cotr);
     if(cotr[1] != 0x55)
     {
