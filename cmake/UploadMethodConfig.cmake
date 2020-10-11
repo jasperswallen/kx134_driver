@@ -21,7 +21,7 @@ set(MBED_PATH "/Volumes/NOD_H743ZI2/")
 set(JLINK_UPLOAD_ENABLED FALSE)
 
 if(JLINK_UPLOAD_ENABLED)
-    set(JLINK_CPU_NAME LPC1768)
+    set(JLINK_CPU_NAME STM32H743ZI2)
     set(JLINK_JTAG_SPEED 4000)
 endif()
 
@@ -31,20 +31,20 @@ endif()
 set(PYOCD_UPLOAD_ENABLED TRUE)
 
 if(PYOCD_UPLOAD_ENABLED)
-    set(PYOCD_TARGET_NAME stm32f429xi)
+    set(PYOCD_TARGET_NAME stm32h743zi2)
     set(PYOCD_JTAG_SPEED 4000k)
 endif()
 
 # Config options for OPENOCD
 # -------------------------------------------------------------
 
-set(OPENOCD_UPLOAD_ENABLED FALSE)
+set(OPENOCD_UPLOAD_ENABLED TRUE)
 
 if(OPENOCD_UPLOAD_ENABLED)
     set(OPENOCD_CHIP_CONFIG_COMMANDS
-        -f ${OpenOCD_SCRIPT_DIR}/interface/cmsis-dap.cfg
-        -f ${OpenOCD_SCRIPT_DIR}/target/lpc17xx.cfg
-        -c "gdb_memory_map disable")
+        -f ${CMAKE_CURRENT_LIST_DIR}/stm32h743-disco.cfg
+        -c "gdb_memory_map disable" # prevents OpenOCD crash on GDB connect
+        )
 endif()
 
 # Config options for NXPPROG
@@ -75,6 +75,3 @@ if(STM32CUBE_UPLOAD_ENABLED)
         list(APPEND STM32CUBE_GDBSERVER_ARGS --serial-number ${STM32CUBE_PROBE_SN})
     endif()
 endif()
-
-
-
