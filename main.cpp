@@ -38,8 +38,8 @@ int main(void)
 
     for(size_t trialIndex = 0; trialIndex < numTrials; ++trialIndex)
     {
-        float time = 1.0 / (float)hz * 1000.0;
-        ThisThread::sleep_for(time);
+        while(!kx134Obj.dataReady())
+            ;
 
         int16_t output[3];
         kx134Obj.getAccelerations(output);

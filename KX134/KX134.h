@@ -171,6 +171,8 @@ class KX134
     // Set Output Data Rate from Hz
     void setOutputDataRateHz(uint32_t hz);
 
+    bool dataReady();
+
   private:
     // Mbed pin identities
     SPI _spi;

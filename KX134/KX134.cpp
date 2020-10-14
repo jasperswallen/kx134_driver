@@ -21,7 +21,7 @@ KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
 {
     // set default values for settings variables
     resStatus = 1;   // high performance mode
-    drdyeStatus = 0; // Data Ready Engine disabled
+    drdyeStatus = 1; // Data Ready Engine enabled
     gsel1Status = 0; // +-8g bit 1
     gsel0Status = 0; // +-8g bit 0
     tdteStatus = 0;  // Tap/Double-Tap engine disabled
@@ -262,4 +262,12 @@ void KX134::disableRegisterWriting()
     writeRegisterOneByte(Register::CNTL1, writeByte);
 
     registerWritingEnabled = 0;
+}
+
+bool KX134::dataReady()
+{
+    uint8_t buf[2];
+    readRegister(Register::INS2, buf);
+
+    return (buf[1] == 0x10);
 }
