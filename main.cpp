@@ -103,31 +103,76 @@
 #include "SerialStream.h"
 
 #define BAUDRATE 115200
+#define CMD_BUFFER_SIZE 32
 
 BufferedSerial serial(USBTX, USBRX, BAUDRATE);
 SerialStream<BufferedSerial> pc(serial);
 
-void rxCallback()
+char cmdStr[CMD_BUFFER_SIZE];
+int currPos = 0;
+volatile bool pendingCmd = false;
+volatile bool shouldRead = false;
+
+void handleStr(char c)
 {
-    pc.printf("?");
+    static char prev_char = '\0';
+    bool bufferFull = (currPos == (CMD_BUFFER_SIZE - 1));
+
+    if(c == '\n' || c == '\r' || bufferFull)
+    {
+        if(prev_char == '\r')
+        {
+            prev_char = c;
+            return;
+        }
+
+        cmdStr[currPos] = '\0';
+
+        pendingCmd = true;
+    }
+    else
+    {
+        pc.putc(c);
+        cmdStr[currPos] = c;
+    }
+    currPos++;
+    prev_char = c;
+}
+
+void clbk(void)
+{
+    shouldRead = true;
+}
+
+void updateCommand(char *cmd)
+{
+    pc.printf("\r\nReceived CMD ");
+    pc.printf(cmd);
+    pc.printf("\r\n");
+
+    pendingCmd = false;
+    memset(cmdStr, 0, strlen(cmdStr));
+    currPos = 0;
 }
 
 int main()
 {
-    pc.printf("hi\r\n");
-    uint8_t buf[10];
-    int size = pc.scanf("%9s", buf);
-    pc.printf("%u %s\r\n", size, buf);
-
-    int event = SERIAL_EVENT_RX_COMPLETE | SERIAL_EVENT_RX_OVERFLOW;
-
-    serial.read(buf, 10, callback(&rxCallback), event, '\n');
-
-    int i = 0;
+    pc.printf("Starting KX134\r\n");
+    serial.sigio(callback(&clbk));
     while(1)
     {
-        pc.printf("%i\t", i);
-        ThisThread::sleep_for(1s);
-        i++;
+        if(shouldRead)
+        {
+            char c[1];
+            pc.read(c, 1);
+            handleStr(c[0]);
+            shouldRead = false;
+        }
+
+        if(pendingCmd)
+        {
+            updateCommand(cmdStr);
+        }
+        ThisThread::sleep_for(1ms);
     }
 }

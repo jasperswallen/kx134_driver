@@ -30,7 +30,6 @@ template <class SerialClass> class SerialStream : public Stream
     {
     }
 
-  private:
     // override Stream::read() and write() to call serial class directly.
     // This avoids the overhead of feeding in individual characters.
     virtual ssize_t write(const void *buffer, size_t length)
@@ -43,13 +42,14 @@ template <class SerialClass> class SerialStream : public Stream
         return serialClass.read(buffer, length);
     }
 
+    template <typename F> void attach(F &&func) { serialClass.attach(func); }
+
+  private:
     // Dummy implementations -- these will never be called because we override
     // write() and read() instead. but we have to override them since they're
     // pure virtual.
     virtual int _putc(int c) { return 0; }
     virtual int _getc() { return 0; }
-
-    template <typename F> void attach(F &&func) { serialClass.attach(func); }
 };
 
 #endif // SERIALSTREAM_H
