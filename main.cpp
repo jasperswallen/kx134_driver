@@ -158,7 +158,7 @@ void updateCommand(char *cmd)
 int main()
 {
     pc.printf("Starting KX134\r\n");
-    serial.sigio(callback(&clbk));
+    pc.sigio(callback(&clbk));
     while(1)
     {
         if(shouldRead)

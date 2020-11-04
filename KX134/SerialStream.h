@@ -42,7 +42,7 @@ template <class SerialClass> class SerialStream : public Stream
         return serialClass.read(buffer, length);
     }
 
-    template <typename F> void attach(F &&func) { serialClass.attach(func); }
+    void sigio(Callback<void()> func) { serialClass.sigio(func); }
 
   private:
     // Dummy implementations -- these will never be called because we override
