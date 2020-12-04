@@ -42,14 +42,28 @@ template <class SerialClass> class SerialStream : public Stream
         return serialClass.read(buffer, length);
     }
 
-    void sigio(Callback<void()> func) { serialClass.sigio(func); }
+    void sigio(Callback<void()> func)
+    {
+        serialClass.sigio(func);
+    }
+
+    void attach(Callback<void()> func, SerialBase::IrqType type = RxIrq)
+    {
+        serialClass.attach(func, type);
+    }
 
   private:
     // Dummy implementations -- these will never be called because we override
     // write() and read() instead. but we have to override them since they're
     // pure virtual.
-    virtual int _putc(int c) { return 0; }
-    virtual int _getc() { return 0; }
+    virtual int _putc(int c)
+    {
+        return 0;
+    }
+    virtual int _getc()
+    {
+        return 0;
+    }
 };
 
 #endif // SERIALSTREAM_H
