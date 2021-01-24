@@ -76,6 +76,9 @@ bool KX134::reset()
 void KX134::deselect()
 {
     _cs.write(1);
+
+    // Delay one max-speed clock cycle (100ns) to ensure chip is ready by next write
+    wait_us(1);
 }
 
 void KX134::select()
