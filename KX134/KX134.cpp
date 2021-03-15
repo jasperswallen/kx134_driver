@@ -3,17 +3,13 @@
 #include <inttypes.h>
 #include <math.h>
 
-#ifdef KX_SPI
-
 #define SPI_FREQ 1000000
 
 /** Set to 1 to enable debug printouts */
 #define KX134_DEBUG 1
 
-KX134::KX134(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs)
+KX134Base::KX134Base(Stream* debug)
     : _debug(debug)
-    , _spi(mosi, miso, sclk)
-    , _cs(cs)
     , res(1)
     , drdye_enable(1)
     , gsel { 0, 0 }
@@ -24,20 +20,9 @@ KX134::KX134(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs
     , fstup(0)
     , osa { 0, 1, 1, 0 }
 {
-    deselect();
 }
 
-bool KX134::init()
-{
-    deselect();
-
-    _spi.frequency(SPI_FREQ);
-    _spi.format(8, 1);
-
-    return reset();
-}
-
-bool KX134::reset()
+bool KX134Base::reset()
 {
     // write registers to start reset
     writeRegisterOneByte(Register::INTERNAL_0X7F, 0x00);
@@ -51,11 +36,11 @@ bool KX134::reset()
     return checkExistence();
 }
 
-bool KX134::checkExistence()
+bool KX134Base::checkExistence()
 {
     // verify WHO_I_AM
-    uint8_t whoami;
-    readRegister(Register::WHO_AM_I, &whoami);
+    char whoami;
+    readRegisterOneByte(Register::WHO_AM_I, whoami);
 
 #if KX134_DEBUG
     _debug->printf("Checking existence: WHO_AM_I returned 0x%X", whoami);
@@ -69,8 +54,8 @@ bool KX134::checkExistence()
     }
 
     // verify COTR
-    uint8_t cotr;
-    readRegister(Register::COTR, &cotr);
+    char cotr;
+    readRegisterOneByte(Register::COTR, cotr);
 
 #if KX134_DEBUG
     _debug->printf(" and COTR returned 0x%X", cotr);
@@ -90,9 +75,9 @@ bool KX134::checkExistence()
     return true;
 }
 
-void KX134::getAccelerations(int16_t* output)
+void KX134Base::getAccelerations(int16_t* output)
 {
-    uint8_t words[6];
+    char words[6];
 
     // this was the recommended method by Kionix
     // for some reason, this has *significantly* less noise than reading
@@ -108,19 +93,19 @@ void KX134::getAccelerations(int16_t* output)
 #endif
 }
 
-bool KX134::dataReady()
+bool KX134Base::dataReady()
 {
-    uint8_t buf;
-    readRegister(Register::INS2, &buf);
+    char buf;
+    readRegisterOneByte(Register::INS2, buf);
 
 #if KX134_DEBUG
     _debug->printf("Checking if data is ready: expected 0x10, received 0x%X\r\n", buf);
 #endif
 
-    return (buf == 0x10);
+    return (buf & (1 << 4)); // bit4 should be set
 }
 
-float KX134::convertRawToGravs(int16_t lsbValue) const
+float KX134Base::convertRawToGravs(int16_t lsbValue) const
 {
     if (gsel[1] && gsel[0])
     {
@@ -148,9 +133,9 @@ float KX134::convertRawToGravs(int16_t lsbValue) const
     }
 }
 
-void KX134::setAccelOffsets(int16_t* offsets) { memcpy(_offsets, offsets, sizeof(_offsets)); }
+void KX134Base::setAccelOffsets(int16_t* offsets) { memcpy(_offsets, offsets, sizeof(_offsets)); }
 
-void KX134::setAccelRange(Range range)
+void KX134Base::setAccelRange(Range range)
 {
 #if KX134_DEBUG
     _debug->printf("Setting range to 0x%" PRIx8 "\r\n", static_cast<uint8_t>(range));
@@ -168,7 +153,7 @@ void KX134::setAccelRange(Range range)
     writeRegisterOneByte(Register::CNTL1, writeByte);
 }
 
-void KX134::setOutputDataRateHz(uint32_t hz)
+void KX134Base::setOutputDataRateHz(uint32_t hz)
 {
 #if KX134_DEBUG
     _debug->printf("Setting ODR to %" PRIu32 " hz\r\n", hz);
@@ -185,7 +170,7 @@ void KX134::setOutputDataRateHz(uint32_t hz)
     setOutputDataRateBytes(bytes_int);
 }
 
-void KX134::setOutputDataRateBytes(uint8_t byteHz)
+void KX134Base::setOutputDataRateBytes(uint8_t byteHz)
 {
 #if KX134_DEBUG
     _debug->printf("Setting ODR to 0x%x byte-wise\r\n", byteHz);
@@ -208,7 +193,84 @@ void KX134::setOutputDataRateBytes(uint8_t byteHz)
     disableRegisterWriting();
 }
 
-void KX134::readRegister(Register addr, uint8_t* rx_buf, int size)
+void KX134Base::readRegisterOneByte(Register addr, char &rx_buf)
+{
+    readRegister(addr, &rx_buf);
+}
+
+void KX134Base::writeRegisterOneByte(Register addr, char data, char* buf)
+{
+    writeRegister(addr, &data, buf);
+}
+
+
+int16_t KX134Base::read16BitValue(Register lowAddr, Register highAddr)
+{
+    // get contents of register
+    char lowWord, highWord;
+    readRegisterOneByte(lowAddr, lowWord);
+    readRegisterOneByte(highAddr, highWord);
+
+    return convertTo16BitValue(lowWord, highWord);
+}
+
+int16_t KX134Base::convertTo16BitValue(uint8_t low, uint8_t high)
+{
+    // combine low & high words
+    uint16_t val2sComplement = (static_cast<uint16_t>(high << 8)) | low;
+    int16_t value = static_cast<int16_t>(val2sComplement);
+
+#if KX134_DEBUG
+    _debug->printf(
+        "Converting low (%d) and high (%d) to get 16 bit value (%d)\r\n", low, high, value);
+#endif
+
+    return value;
+}
+
+void KX134Base::enableRegisterWriting()
+{
+#if KX134_DEBUG
+    _debug->printf("Enabling register writing\r\n");
+#endif
+    uint8_t writeByte = (0 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
+        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
+
+    writeRegisterOneByte(Register::CNTL1, writeByte);
+}
+
+void KX134Base::disableRegisterWriting()
+{
+#if KX134_DEBUG
+    _debug->printf("Disabling register writing\r\n");
+#endif
+
+    uint8_t writeByte = (1 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
+        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
+    // reserved bit 1, PC1 bit must be enabled
+
+    writeRegisterOneByte(Register::CNTL1, writeByte);
+}
+
+KX134SPI::KX134SPI(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs)
+    : KX134Base(debug)
+    , _spi(mosi, miso, sclk)
+    , _cs(cs)
+{
+    deselect();
+}
+
+bool KX134SPI::init()
+{
+    deselect();
+
+    _spi.frequency(SPI_FREQ);
+    _spi.format(8, 1);
+
+    return reset();
+}
+
+void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
 {
     select();
 
@@ -235,86 +297,42 @@ void KX134::readRegister(Register addr, uint8_t* rx_buf, int size)
     deselect();
 }
 
-void KX134::writeRegister(Register addr, uint8_t* data, uint8_t* rx_buf, int size)
+void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size)
 {
     select();
 
     _spi.write(static_cast<uint8_t>(addr)); // select register
     for (int i = 0; i < size; ++i)
     {
-        rx_buf[i] = _spi.write(data[i]);
+        if (rx_buf != nullptr)
+        {
+            rx_buf[i] = _spi.write(tx_buf[i]);
 #if KX134_DEBUG
-        _debug->printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
-            data[i],
-            static_cast<uint8_t>(addr),
-            rx_buf[i]);
+            _debug->printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
+                tx_buf[i],
+                static_cast<uint8_t>(addr),
+                rx_buf[i]);
 #endif
+        }
+        else
+        {
+#if KX134_DEBUG
+            _debug->printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
+                tx_buf[i],
+                static_cast<uint8_t>(addr),
+#endif
+                _spi.write(tx_buf[i])
+#if KX134_DEBUG
+            )
+#endif
+                ;
+        }
     }
 
     deselect();
 }
 
-void KX134::writeRegisterOneByte(Register addr, uint8_t data, uint8_t* buf)
-{
-    static uint8_t defaultBuffer[2] = { 0 };
-    if (buf == nullptr)
-    {
-        buf = defaultBuffer;
-    }
-
-    uint8_t _data[1] = { data };
-    writeRegister(addr, _data, buf);
-}
-
-int16_t KX134::read16BitValue(Register lowAddr, Register highAddr)
-{
-    // get contents of register
-    uint8_t lowWord, highWord;
-    readRegister(lowAddr, &lowWord);
-    readRegister(highAddr, &highWord);
-
-    return convertTo16BitValue(lowWord, highWord);
-}
-
-int16_t KX134::convertTo16BitValue(uint8_t low, uint8_t high)
-{
-    // combine low & high words
-    uint16_t val2sComplement = (static_cast<uint16_t>(high << 8)) | low;
-    int16_t value = static_cast<int16_t>(val2sComplement);
-
-#if KX134_DEBUG
-    _debug->printf(
-        "Converting low (%d) and high (%d) to get 16 bit value (%d)\r\n", low, high, value);
-#endif
-
-    return value;
-}
-
-void KX134::enableRegisterWriting()
-{
-#if KX134_DEBUG
-    _debug->printf("Enabling register writing\r\n");
-#endif
-    uint8_t writeByte = (0 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
-        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
-
-    writeRegisterOneByte(Register::CNTL1, writeByte);
-}
-
-void KX134::disableRegisterWriting()
-{
-#if KX134_DEBUG
-    _debug->printf("Disabling register writing\r\n");
-#endif
-
-    uint8_t writeByte = (1 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
-        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
-    // reserved bit 1, PC1 bit must be enabled
-
-    writeRegisterOneByte(Register::CNTL1, writeByte);
-}
-
-void KX134::deselect()
+void KX134SPI::deselect()
 {
     _cs.write(1);
 
@@ -322,135 +340,59 @@ void KX134::deselect()
     wait_us(1);
 }
 
-void KX134::select()
+void KX134SPI::select()
 {
     _cs.write(0);
 }
 
-#else
-
 #define KX_I2C_FREQ 100000
 
-KX134::KX134(PinName sda, PinName scl) : i2c_(sda, scl)
+KX134I2C::KX134I2C(Stream *debug, PinName sda, PinName scl)
+    : KX134Base(debug)
+    , i2c_(sda, scl)
 {
 }
 
-bool KX134::init()
+bool KX134I2C::init()
 {
     i2c_.frequency(KX_I2C_FREQ);
     return reset();
 }
 
-bool KX134::reset()
+void KX134I2C::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size)
 {
-    int ack = writeRegisterOneByte(Register::INTERNAL_0X7F, 0x00);
-    if (!ack) return false;
+    (void)rx_buf;
 
-    ack = writeRegisterOneByte(Register::CNTL2, 0x00);
-    if (!ack) return false;
-
-    ack = writeRegisterOneByte(Register::CNTL2, 0x80);
-    if (!ack) return false;
-
-    ThisThread::sleep_for(2ms);
-
-    return checkExistance();
-}
-
-bool KX134::checkExistance()
-{
-    uint8_t who_ami_i;
-    readRegisterOneByte(Register::WHO_AM_I, who_ami_i);
-
-    if(who_ami_i != 0x46)
-    {
-        return false;
-    }
-
-    uint8_t cotr;
-    readRegisterOneByte(Register::COTR, cotr);
-
-    if(cotr != 0x55)
-    {
-        return false;
-    }
-
-    return true;
-}
-
-int KX134::writeRegisterOneByte(Register addr, uint8_t tx_data)
-{
-    return writeRegister(addr, &tx_data);
-}
-
-int KX134::writeRegister(Register addr, uint8_t *tx_data, size_t size)
-{
     select(); // S
 
-    int ack = i2c_.write(i2c_addr << 1 | 0); // write mode
+    i2c_.write(i2c_addr << 1 | 0); // write mode
 
-    if (!ack) return ack;
-
-    ack = i2c_.write(static_cast<uint8_t>(addr));
-
-    if (!ack) return ack;
-
-    for (size_t i = 0; i < size; ++i)
-    {
-        ack = i2c_.write(tx_data[i]);
-
-        if (!ack) return ack;
-    }
+    i2c_.write(static_cast<uint8_t>(addr), tx_buf, size);
 
     deselect(); // P
-
-    return ack;
 }
 
-int KX134::readRegisterOneByte(Register addr, uint8_t &rx_buf)
-{
-    return readRegister(addr, &rx_buf);
-}
-
-int KX134::readRegister(Register addr, uint8_t *rx_buf, size_t size)
+void KX134I2C::readRegister(Register addr, char* rx_buf, int size)
 {
     select(); // S
 
-    int ack = i2c_.write(i2c_addr << 1 | 0); // write mode
-    if (!ack) return ack;
+    i2c_.write(i2c_addr << 1 | 0); // write mode
 
-    ack = i2c_.write(static_cast<uint8_t>(addr));
-    if (!ack) return ack;
+    i2c_.write(static_cast<uint8_t>(addr)); // select addr
 
     select(); // Sr
 
-    ack = i2c_.write(i2c_addr << 1 | 1); // read mode
-
-    for (size_t i = 0; i < size; ++i)
-    {
-        if (i == size - 1)
-        {
-            rx_buf[i] = i2c_.read(0); // NACK
-        }
-        else
-        {
-            rx_buf[i] = i2c_.read(1); // ACK
-        }
-    }
+    i2c_.read(i2c_addr << 1 | 1, rx_buf, size);
 
     deselect(); // P
-
-    return ack;
 }
 
-void KX134::select()
+void KX134I2C::select()
 {
     i2c_.lock();
 }
 
-void KX134::deselect()
+void KX134I2C::deselect()
 {
     i2c_.unlock();
 }
-
-#endif

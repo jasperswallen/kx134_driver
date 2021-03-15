@@ -205,7 +205,7 @@ int kx134_test_main()
 }
 
 #else
-KX134 new_accel(NC, NC);
+KX134I2C new_accel(nullptr, NC, NC);
 
 int main()
 {
