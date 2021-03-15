@@ -1,10 +1,9 @@
 /**
+ * @file KX134.h
  * @author Jasper Swallen
- * @filename KX134.h
- *
- * @section DESCRIPTION
- *
- * Software Driver for KX134-1211 accelerometer
+ * @brief Software Driver for KX134-1211 accelerometer
+ * @date 2021-02-20
+ * @copyright Copyright (c) 2021
  *
  * Datasheets:
  * http://kionixfs.kionix.com/en/document/AN101-Getting-Started.pdf
@@ -17,10 +16,120 @@
 #define KX134_H
 
 #include "mbed.h"
+#include "platform/Stream.h"
 
+/**
+ * @brief The KX134 Driver
+ */
 class KX134
 {
-  public:
+public:
+    /**
+     * @brief The possible acceleration ranges
+     */
+    enum class Range : uint8_t
+    {
+        RANGE_8G = 0b00,
+        RANGE_16G = 0b01,
+        RANGE_32G = 0b10,
+        RANGE_64G = 0b11
+    };
+
+public:
+    /**
+     * @brief Construct a new KX134 driver
+     *
+     * @param[in] debug The debug port to output debug messages to
+     * @param[in] mosi The SPI MOSI pin
+     * @param[in] miso The SPI MISO pin
+     * @param[in] sclk The SPI SCLK pin
+     * @param[in] cs The chip select pin
+     */
+    KX134(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs);
+
+    /**
+     * @brief Initializes the KX134
+     *
+     * @return true if the init is successful, false otherwise
+     */
+    bool init();
+
+    /**
+     * @brief Performs a software reset
+     *
+     * @return true if the reset was successful, false otherwise
+     */
+    bool reset();
+
+    /**
+     * @brief Verifies the KX134 unit is connected and functioning normally
+     *
+     * @return true if functioning normally, false otherwise. If false, call reset() and check
+     * again.
+     */
+    bool checkExistence();
+
+    /**
+     * @brief Reads the accelerations in LSB immediately
+     *
+     * @param[out] output The array to read accelerations into. output[0] is X acceleration,
+     * output[1] is Y accel, output[2] is Z accel.
+     */
+    void getAccelerations(int16_t* output);
+
+    /**
+     * @brief Returns if the unit is ready to read acceleration data
+     *
+     * @return true if ready, false otherwise
+     */
+    bool dataReady();
+
+    /**
+     * @brief Converts an LSB value to gravs
+     *
+     * Note:
+     * +-64g: 1LSB = 0.00195g
+     * +-32g: 1LSB = 0.00098g
+     * +-16g: 1LSB = 0.00049g
+     * +-8g: 1LSB = 0.00024g
+
+     * @param[in] lsbValue The value in LSB to convert to gravs
+     * @return The value in gravs
+     */
+    float convertRawToGravs(int16_t lsbValue) const;
+
+    /**
+     * @brief Set offsets that will be added to each acceleration reading before it is returned.
+     *
+     * @param[in] offsets array of 3 integers that will be added to the results
+     */
+    void setAccelOffsets(int16_t* offsets);
+
+    /**
+     * @brief Set acceleration range (8, 16, 32, or 64 gs)
+     *
+     * @param[in] range The Range to set the acceleration range to
+     */
+    void setAccelRange(Range range);
+
+    /**
+     * @brief Set Output Data Rate from Hz
+     *
+     * @param[in] hz An integer representation of the ODR in Hz
+     */
+    void setOutputDataRateHz(uint32_t hz);
+
+    /**
+     * @brief Set Output Data Rate Bitwise
+     *
+     * @param[in] byteHz A bit-wise representation of the ODR
+     */
+    void setOutputDataRateBytes(uint8_t byteHz);
+
+private:
+    /**
+     * @brief The list of registers
+     */
     enum class Register : uint8_t
     {
         MAN_ID = 0x00,
@@ -110,142 +219,228 @@ class KX134
         INTERNAL_0X7F = 0x7F
     };
 
-    enum class Range : uint8_t
-    {
-        RANGE_8G = 0b00,
-        RANGE_16G = 0b01,
-        RANGE_32G = 0b10,
-        RANGE_64G = 0b11
-    };
-
-    KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
-          PinName int2, PinName rst);
-
-    ~KX134();
-
-    bool init();
-
-    /* Converts a LSB value to gravs
-     * To convert to m/s^2, multiply by 1G (~9.8m/s^2)
+private:
+    /**
+     * @brief Reads a given register a given number of bytes
      *
-     * Note:
-     * +-64g: 1LSB = 0.00195g
-     * +-32g: 1LSB = 0.00098g
-     * +-16g: 1LSB = 0.00049g
-     * +-8g: 1LSB = 0.00024g
+     * @param[in] addr The register to read from
+     * @param[out] rx_buf The buffer to read into
+     * @param[in] size The number of bytes to read
      */
-    float convertRawToGravs(int16_t lsbValue);
+    void readRegister(Register addr, uint8_t* rx_buf, int size = 1);
 
-    /* Changes the value of output[3] as follows:
-     * output[0] is X acceleration
-     * output[1] is Y accel
-     * output[2] is Z accel
+    /**
+     * @brief Writes data to a given register
      *
-     * Results are in LSB format, to convert call convertRawToGravs() on each
-     * output
+     * @param[in] addr The register to write to
+     * @param[in] data The data to write
+     * @param[out] rx_buf The response to receive
+     * @param[in] size The number of bytes to write.
      */
-    void getAccelerations(int16_t *output);
+    void writeRegister(Register addr, uint8_t* data, uint8_t* rx_buf, int size = 1);
 
-    /* Verifies the KX134-1211 unit is connected and functioning normally.
-     * If it returns false, call reset() and check again.
-     */
-    bool checkExistence();
-
-    /* To enable writing to settings registers, this function must be called.
-     * After writing settings, register writing is automatically disabled, and
-     * this function must be called again to enable it.
-     */
-    void enableRegisterWriting();
-
-    /* Saves settings as currently set and disables register writing.
-     * Useful for state changes
-     */
-    void disableRegisterWriting();
-
-    // Set acceleration range (8, 16, 32, or 64 gs)
-    void setAccelRange(Range range);
-
-    // Set Output Data Rate Bitwise
-    void setOutputDataRateBytes(uint8_t byteHz);
-
-    // Set Output Data Rate from Hz
-    void setOutputDataRateHz(uint32_t hz);
-
-    bool dataReady();
-
-  private:
-    // Mbed pin identities
-    SPI _spi;
-    PinName _int1, _int2;
-    DigitalOut _cs;
-    DigitalOut _rst;
-
-    /* Reset function
-     * Should be called on initial start (init()) and every software reset
-     */
-    bool reset();
-
-    /* Deselect (push high) _cs
-     */
-    void deselect();
-
-    /* Select (push low) _cs
-     */
-    void select();
-
-    /* Read a given register a given number of bytes
+    /**
+     * @brief Writes a given register 1 byte
+     * Convenience function, calls writeRegister()
      *
-     * Note: the first byte read should return 0x0, so the data begins at
-     * rx_buf[1]
+     * @param[in] addr The register to write to
+     * @param[in] data The data to write
+     * @param[out] buf The response data to receive
      */
-    void readRegister(Register addr, uint8_t *rx_buf, int size = 2);
+    void writeRegisterOneByte(Register addr, uint8_t data, uint8_t* buf = nullptr);
 
-    /* Writes a given register a given number of bytes
+    /**
+     * @brief Reads a value from a low and high address and combines them to create a signed (2s
+     * complement) 16-bit integer
      *
-     * Note: the first byte read should return 0x0, so the data begins at
-     * rx_buf[1]
-     */
-    void writeRegister(Register addr, uint8_t *data, uint8_t *rx_buf,
-                       int size = 1);
-
-    /* Writes a given register 1 byte (convenience function, calls
-     * writeRegister())
-     *
-     * Note: the first byte read should return 0x0, so the data begins at
-     * rx_buf[1]
-     */
-    void writeRegisterOneByte(Register addr, uint8_t data, uint8_t *buf);
-
-    /* Reads a value from a low and high address and combines them to create a
-     * signed (2s complement) 16-bit integer
+     * @param[in] lowAddr The low address to read from
+     * @param[in] highAddr The high address to read from
+     * @return The signed representation of their value
      */
     int16_t read16BitValue(Register lowAddr, Register highAddr);
 
-    /* Converts 2 8-bit unsigned integers to a single signed 16-bit (2s
-     * complement) integer
+    /**
+     * @brief Converts 2 8-bit unsigned integers to a single signed 16-bit (2s complement) integer
+     *
+     * @param[in] low The 8 lower bits
+     * @param[in] high The 8 upper bits
+     * @return The signed representation of their value
      */
     int16_t convertTo16BitValue(uint8_t low, uint8_t high);
 
-    // Settings variables
+    /**
+     * @brief Enables writing new settings to the ODCNTL and CNTL1 registers
+     *
+     * After writing settings, register writing is automatically disabled, and this function must be
+     * called again to enable it.
+     */
+    void enableRegisterWriting();
 
-    // CNTL1 vars
-    bool resStatus;
-    bool drdyeStatus;
-    bool gsel1Status;
-    bool gsel0Status;
-    bool tdteStatus;
-    bool tpeStatus;
+    /**
+     * @brief Saves current settings and disables modification to ODCNTL and CNTL1 registers
+     */
+    void disableRegisterWriting();
 
-    // ODCNTL vars
-    bool iirBypass;
+    /**
+     * @brief Deselect (push high) chip select pin to let other devices perform transactions
+     */
+    void deselect();
+
+    /**
+     * @brief Select (push low) chip select pin to allow transactions
+     */
+    void select();
+
+private:
+    /** @brief The debug port */
+    Stream* _debug;
+
+    /** @brief The SPI interface */
+    SPI _spi;
+
+    /** @brief The chip select pin */
+    DigitalOut _cs;
+
+    /** @brief Calibration offsets in LSB */
+    int16_t _offsets[3];
+
+    /**
+     * @name CNTL1
+     *
+     * Control register 1. Read/write control register that controls the main feature set.
+     *
+     * Note that to properly change the value of these registers, the PC1 bit in CNTL1 register must
+     * first be set to “0”.
+     * @{
+     */
+
+    /**
+     * @brief The RES bit determines the performance mode
+     *
+     * RES = 0 – Low Power mode (higher noise, lower current, 16-bit output data)
+     * RES = 1 – High-Performance mode (lower noise, higher current, 16-bit output data)
+     */
+    bool res;
+
+    /**
+     * @brief Data Ready Engine enable bit
+     *
+     * DRDYE = 0 – Data Ready Engine is disabled
+     * DRDYE = 1 – Data Ready Engine is enabled
+     */
+    bool drdye_enable;
+
+    /**
+     * @brief G-range Select (GSEL) bits select the acceleration range of the accelerometer outputs
+     * per Table 7. This range is also called a full-scale range of the accelerometer.
+     *
+     * GSEL1 | GSEL0 | Range
+     * ----- | ----- | -----
+     * 0     | 0     | +-8g
+     * 0     | 1     | +-16g
+     * 1     | 0     | +-32g
+     * 1     | 1     | +-64g
+     */
+    bool gsel[2];
+
+    /**
+     * @brief Tap/Double-Tap Engine (TDTE) enable bit.
+     *
+     * TDTE = 0 – Tap/Double-Tap Engine is disabled
+     * TDTE = 1 – Tap/Double-Tap Engine is enabled
+     */
+    bool tdte_enable;
+
+    /**
+     * @brief Tilt Position Engine (TPE) enable bit.
+     *
+     * TPE = 0 – Tilt Position Engine is disabled
+     * TPE = 1 – Tilt Position Engine is enabled
+     */
+    bool tpe_enable;
+
+    /**
+     * @}
+     */
+
+    /**
+     * @name ODCNTL
+     *
+     * Output data control register that configures the acceleration outputs.
+     *
+     * Note that to properly change the value of these registers, the PC1 bit in CNTL1 register must
+     * first be set to “0”.
+     * @{
+     */
+
+    /**
+     * @brief IIR Filter Bypass mode enable bit
+     *
+     * IIR_BYPASS = 0 – IIR filter is not bypassed, i.e. filtering is applied (default)
+     * IIR_BYPASS = 1 – IIR filter is bypassed.
+     *
+     * Notes for IIR_BYPASS = 1 setting:
+     * 1. Not recommended at OSA<3:0> = 1111 (ODR = 25600Hz)
+     * 2. Not recommended in Low Power Mode with AVC<2:0> = 000 setting (no averaging)
+     * 3. This setting may reduce the resolution of the output data.
+     */
+    bool iir_bypass;
+
+    /**
+     * @brief Low-Pass filter Roll-Off control
+     *
+     * LPRO = 0 – IIR filter corner frequency set to ODR/9 (default)
+     * LPRO = 1 – IIR filter corner frequency set to ODR/2
+     */
     bool lpro;
-    bool fstup;
-    bool osa3;
-    bool osa2;
-    bool osa1;
-    bool osa0;
 
-    bool registerWritingEnabled;
+    /**
+     * @brief Fast Start Up Enable bit.
+     *
+     * The setting of this bit controls the start up time only when accelerometer operates in
+     * High-Performance mode with ODR ≤ 200Hz. If fast start up is disabled (FSTUP=0), the start up
+     * time in High-Performance mode would vary with ODR. If fast start up is enabled (FSTUP=1), the
+     * start up time in High Performance mode would be fixed. See KX134-1211 Product specifications
+     * for details.
+     *
+     * FSTUP = 0 – Fast Start is disabled
+     * FSTUP = 1 – Fast Start is enabled
+     */
+    bool fstup;
+
+    /**
+     * @brief Output Data Rate (ODR) settings for accelerometer sensor.
+     *
+     * The default ODR is 50Hz.
+     *
+     * OSA3|OSA2|OSA1|OSA0|Output Data Rate (Hz)
+     * :--:|:--:|:--:|:--:|:-------------------:
+     * 0   |0   |0   |0   |0.781*
+     * 0   |0   |0   |1   |1.563*
+     * 0   |0   |1   |0   |3.125*
+     * 0   |0   |1   |1   |6.25*
+     * 0   |1   |0   |0   |12.5*
+     * 0   |1   |0   |1   |25*
+     * 0   |1   |1   |0   |50*
+     * 0   |1   |1   |1   |100*
+     * 1   |0   |0   |0   |200*
+     * 1   |0   |0   |1   |400*
+     * 1   |0   |1   |0   |800**
+     * 1   |0   |1   |1   |1600**
+     * 1   |1   |0   |0   |3200**
+     * 1   |1   |0   |1   |6400**
+     * 1   |1   |1   |0   |12800**
+     * 1   |1   |1   |1   |25600**
+     *
+     * <p>* Available in Low Power and High-Performance modes</p>
+     * <p>** Available in High-Performance mode only. Accelerometer will default to High-Performance
+     * mode regardless of the RES bit setting in CNTL1 register.</p>
+     */
+    bool osa[4];
+
+    /**
+     * @}
+     */
 };
 
 #endif // KX134_H

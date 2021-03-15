@@ -1,48 +1,28 @@
 #include "KX134.h"
-#include "math.h"
 
-#define SPI_FREQ 100000
+#include <inttypes.h>
+#include <math.h>
 
-static uint8_t defaultBuffer[2] = {0}; // allows calling writeRegisterOneByte
-                                       // without buf argument
+#define SPI_FREQ 1000000
 
-/* Writes one byte to a register
- */
-void KX134::writeRegisterOneByte(Register addr, uint8_t data,
-                                 uint8_t *buf = defaultBuffer)
+/** Set to 1 to enable debug printouts */
+#define KX134_DEBUG 1
+
+KX134::KX134(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs)
+    : _debug(debug)
+    , _spi(mosi, miso, sclk)
+    , _cs(cs)
+    , res(1)
+    , drdye_enable(1)
+    , gsel { 0, 0 }
+    , tdte_enable(0)
+    , tpe_enable(0)
+    , iir_bypass(0)
+    , lpro(0)
+    , fstup(0)
+    , osa { 0, 1, 1, 0 }
 {
-    uint8_t _data[1] = {data};
-    writeRegister(addr, _data, buf);
-}
-
-KX134::KX134(PinName mosi, PinName miso, PinName sclk, PinName cs, PinName int1,
-             PinName int2, PinName rst)
-    : _spi(mosi, miso, sclk), _int1(int1), _int2(int2), _cs(cs), _rst(rst)
-{
-    // set default values for settings variables
-    resStatus = 1;   // high performance mode
-    drdyeStatus = 1; // Data Ready Engine enabled
-    gsel1Status = 0; // +-8g bit 1
-    gsel0Status = 0; // +-8g bit 0
-    tdteStatus = 0;  // Tap/Double-Tap engine disabled
-    tpeStatus = 0;   // Tilt Position Engine disabled
-
-    iirBypass = 0; // IIR filter is not bypassed, i.e. filtering is applied
-    lpro = 0;      // IIR filter corner frequency set to ODR/9
-    fstup = 0;     // Fast Start is disabled
-    osa3 = 0;      // Output Data Rate bits
-    osa2 = 1;      // default is 50hz
-    osa1 = 1;
-    osa0 = 0;
-
-    registerWritingEnabled = 0;
-
     deselect();
-}
-
-KX134::~KX134()
-{
-    printf("%d %d %d %d\r\n", osa3, osa2, osa1, osa0);
 }
 
 bool KX134::init()
@@ -69,88 +49,93 @@ bool KX134::reset()
     return checkExistence();
 }
 
-/* Helper Functions
- * ====================================================
- */
-
-void KX134::deselect()
+bool KX134::checkExistence()
 {
-    _cs.write(1);
+    // verify WHO_I_AM
+    uint8_t whoami;
+    readRegister(Register::WHO_AM_I, &whoami);
 
-    // Delay one max-speed clock cycle (100ns) to ensure chip is ready by next write
-    wait_us(1);
-}
-
-void KX134::select()
-{
-    _cs.write(0);
-}
-
-void KX134::readRegister(Register addr, uint8_t *rx_buf, int size)
-{
-    select();
-
-    rx_buf[0] = _spi.write((uint8_t)addr | (1 << 7));
-
-    for(int i = 1; i < size; ++i)
+#if KX134_DEBUG
+    _debug->printf("Checking existence: WHO_AM_I returned 0x%X", whoami);
+#endif
+    if (whoami != 0x46)
     {
-        rx_buf[i] = _spi.write(0x00);
+#if KX134_DEBUG
+        _debug->printf(" but expected 0x46\r\n");
+#endif
+        return false; // WHO_AM_I is incorrect
     }
 
-    deselect();
-}
+    // verify COTR
+    uint8_t cotr;
+    readRegister(Register::COTR, &cotr);
 
-void KX134::writeRegister(Register addr, uint8_t *data, uint8_t *rx_buf,
-                          int size)
-{
-    select();
-
-    _spi.write((uint8_t)addr); // select register
-    for(int i = 0; i < size; ++i)
+#if KX134_DEBUG
+    _debug->printf(" and COTR returned 0x%X", cotr);
+#endif
+    if (cotr != 0x55)
     {
-        rx_buf[i] = _spi.write(data[i]);
+#if KX134_DEBUG
+        _debug->printf(" but expected 0x55\r\n");
+#endif
+        return false; // COTR is incorrect
     }
 
-    deselect();
+#if KX134_DEBUG
+    _debug->printf("\r\nSuccessfully checked existence\r\n");
+#endif
+
+    return true;
 }
 
-int16_t KX134::read16BitValue(Register lowAddr, Register highAddr)
+void KX134::getAccelerations(int16_t* output)
 {
-    // get contents of register
-    uint8_t lowWord[2], highWord[2];
-    readRegister(lowAddr, lowWord);
-    readRegister(highAddr, highWord);
+    uint8_t words[6];
 
-    return convertTo16BitValue(lowWord[1], highWord[1]);
+    // this was the recommended method by Kionix
+    // for some reason, this has *significantly* less noise than reading
+    // one-by-one
+    readRegister(Register::XOUT_L, words, 6);
+
+    output[0] = convertTo16BitValue(words[0], words[1]) + _offsets[0];
+    output[1] = convertTo16BitValue(words[2], words[3]) + _offsets[1];
+    output[2] = convertTo16BitValue(words[4], words[5]) + _offsets[2];
+
+#if KX134_DEBUG
+    _debug->printf("Got accelerations: x=%d, y=%d, z=%d\r\n", output[0], output[1], output[2]);
+#endif
 }
 
-int16_t KX134::convertTo16BitValue(uint8_t low, uint8_t high)
+bool KX134::dataReady()
 {
-    // combine low & high words
-    uint16_t val2sComplement = (static_cast<uint16_t>(high << 8)) | low;
-    int16_t value = static_cast<int16_t>(val2sComplement);
+    uint8_t buf;
+    readRegister(Register::INS2, &buf);
 
-    return value;
+#if KX134_DEBUG
+    _debug->printf("Checking if data is ready: expected 0x10, received 0x%X\r\n", buf);
+#endif
+
+    return (buf == 0x10);
 }
 
-float KX134::convertRawToGravs(int16_t lsbValue)
+float KX134::convertRawToGravs(int16_t lsbValue) const
 {
-    if(gsel1Status && gsel0Status)
+    if (gsel[1] && gsel[0])
     {
         // +-64g
         return (float)lsbValue * 0.00195f;
     }
-    else if(gsel1Status && !gsel0Status)
+    else if (gsel[1] && !gsel[0])
     {
         // +-32g
         return (float)lsbValue * 0.00098f;
     }
-    else if(!gsel1Status && gsel0Status)
+    else if (!gsel[1] && gsel[0])
     {
         // +-16g
         return (float)lsbValue * 0.00049f;
     }
-    else if(!gsel1Status && !gsel0Status)
+    else if (!gsel[1] && !gsel[0])
     {
         // +-8g
         return (float)lsbValue * 0.00024f;
@@ -161,78 +146,32 @@ float KX134::convertRawToGravs(int16_t lsbValue)
     }
 }
 
-void KX134::getAccelerations(int16_t *output)
-{
-    uint8_t words[7];
-
-    // this was the recommended method by Kionix
-    // for some reason, this has *significantly* less noise than reading
-    // one-by-one
-    readRegister(Register::XOUT_L, words, 7);
-
-    output[0] = convertTo16BitValue(words[1], words[2]);
-    output[1] = convertTo16BitValue(words[3], words[4]);
-    output[2] = convertTo16BitValue(words[5], words[6]);
-}
-
-bool KX134::checkExistence()
-{
-    // verify WHO_I_AM
-    uint8_t whoami[2];
-    readRegister(Register::WHO_AM_I, whoami);
-
-    if(whoami[1] != 0x46)
-    {
-        return false; // WHO_AM_I is incorrect
-    }
-
-    // verify COTR
-    uint8_t cotr[2];
-    readRegister(Register::COTR, cotr);
-    if(cotr[1] != 0x55)
-    {
-        return false; // COTR is incorrect
-    }
-
-    return true;
-}
+void KX134::setAccelOffsets(int16_t* offsets) { memcpy(_offsets, offsets, sizeof(_offsets)); }
 
 void KX134::setAccelRange(Range range)
 {
-    gsel0Status = (uint8_t)range & 0b01;
-    gsel1Status = (uint8_t)range & 0b10;
+#if KX134_DEBUG
+    _debug->printf("Setting range to 0x%" PRIx8 "\r\n", static_cast<uint8_t>(range));
+#endif
 
-    uint8_t writeByte = (1 << 7) | (resStatus << 6) | (drdyeStatus << 5) |
-                        (gsel1Status << 4) | (gsel0Status << 3) |
-                        (tdteStatus << 2) | (tpeStatus);
+    enableRegisterWriting();
+
+    gsel[0] = static_cast<uint8_t>(range) & 0b01;
+    gsel[1] = static_cast<uint8_t>(range) & 0b10;
+
+    uint8_t writeByte = (1 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
+        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
     // reserved bit 1, PC1 bit must be enabled
 
     writeRegisterOneByte(Register::CNTL1, writeByte);
-
-    registerWritingEnabled = 0;
-}
-
-void KX134::setOutputDataRateBytes(uint8_t byteHz)
-{
-    if(!registerWritingEnabled)
-    {
-        return;
-    }
-
-    osa0 = byteHz & 0b0001;
-    osa1 = byteHz & 0b0010;
-    osa2 = byteHz & 0b0100;
-    osa3 = byteHz & 0b1000;
-
-    uint8_t writeByte = (iirBypass << 7) | (lpro << 6) | (fstup << 5) |
-                        (osa3 << 3) | (osa2 << 2) | (osa1 << 1) | osa0;
-    // reserved bit 4
-
-    writeRegisterOneByte(Register::ODCNTL, writeByte);
 }
 
 void KX134::setOutputDataRateHz(uint32_t hz)
 {
+#if KX134_DEBUG
+    _debug->printf("Setting ODR to %" PRIu32 " hz\r\n", hz);
+#endif
+
     // calculate byte representation from new polling rate
     // bytes = log2(32*rate/25)
 
@@ -244,33 +183,144 @@ void KX134::setOutputDataRateHz(uint32_t hz)
     setOutputDataRateBytes(bytes_int);
 }
 
+void KX134::setOutputDataRateBytes(uint8_t byteHz)
+{
+#if KX134_DEBUG
+    _debug->printf("Setting ODR to 0x%x byte-wise\r\n", byteHz);
+    _debug->printf("That should be %f hz\r\n", pow(2, byteHz) * 25.0 / 32.0);
+#endif
+
+    enableRegisterWriting();
+
+    osa[0] = byteHz & 0b0001;
+    osa[1] = byteHz & 0b0010;
+    osa[2] = byteHz & 0b0100;
+    osa[3] = byteHz & 0b1000;
+
+    uint8_t writeByte = (iir_bypass << 7) | (lpro << 6) | (fstup << 5) | (osa[3] << 3)
+        | (osa[2] << 2) | (osa[1] << 1) | osa[0];
+    // reserved bit 4
+
+    writeRegisterOneByte(Register::ODCNTL, writeByte);
+
+    disableRegisterWriting();
+}
+
+void KX134::readRegister(Register addr, uint8_t* rx_buf, int size)
+{
+    select();
+
+    /* Select the register to read */
+#if KX134_DEBUG
+    _debug->printf("Selected register 0x%" PRIX8 " and received 0x%X\r\n",
+        static_cast<uint8_t>(addr),
+#endif
+        _spi.write(static_cast<uint8_t>(addr) | 0x80)
+#if KX134_DEBUG
+    )
+#endif
+        ;
+
+    for (int i = 0; i < size; ++i)
+    {
+        rx_buf[i] = _spi.write(0x00);
+#if KX134_DEBUG
+        _debug->printf(
+            "Read 0x%X from register 0x%" PRIX8 "\r\n", rx_buf[i], static_cast<uint8_t>(addr));
+#endif
+    }
+
+    deselect();
+}
+
+void KX134::writeRegister(Register addr, uint8_t* data, uint8_t* rx_buf, int size)
+{
+    select();
+
+    _spi.write(static_cast<uint8_t>(addr)); // select register
+    for (int i = 0; i < size; ++i)
+    {
+        rx_buf[i] = _spi.write(data[i]);
+#if KX134_DEBUG
+        _debug->printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
+            data[i],
+            static_cast<uint8_t>(addr),
+            rx_buf[i]);
+#endif
+    }
+
+    deselect();
+}
+
+void KX134::writeRegisterOneByte(Register addr, uint8_t data, uint8_t* buf)
+{
+    static uint8_t defaultBuffer[2] = { 0 };
+    if (buf == nullptr)
+    {
+        buf = defaultBuffer;
+    }
+
+    uint8_t _data[1] = { data };
+    writeRegister(addr, _data, buf);
+}
+
+int16_t KX134::read16BitValue(Register lowAddr, Register highAddr)
+{
+    // get contents of register
+    uint8_t lowWord, highWord;
+    readRegister(lowAddr, &lowWord);
+    readRegister(highAddr, &highWord);
+
+    return convertTo16BitValue(lowWord, highWord);
+}
+
+int16_t KX134::convertTo16BitValue(uint8_t low, uint8_t high)
+{
+    // combine low & high words
+    uint16_t val2sComplement = (static_cast<uint16_t>(high << 8)) | low;
+    int16_t value = static_cast<int16_t>(val2sComplement);
+
+#if KX134_DEBUG
+    _debug->printf(
+        "Converting low (%d) and high (%d) to get 16 bit value (%d)\r\n", low, high, value);
+#endif
+
+    return value;
+}
+
 void KX134::enableRegisterWriting()
 {
-    writeRegisterOneByte(Register::CNTL1, 0x00);
-    registerWritingEnabled = 1;
+#if KX134_DEBUG
+    _debug->printf("Enabling register writing\r\n");
+#endif
+    uint8_t writeByte = (0 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
+        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
+
+    writeRegisterOneByte(Register::CNTL1, writeByte);
 }
 
 void KX134::disableRegisterWriting()
 {
-    if(!registerWritingEnabled)
-    {
-        return;
-    }
+#if KX134_DEBUG
+    _debug->printf("Disabling register writing\r\n");
+#endif
 
-    uint8_t writeByte = (0 << 7) | (resStatus << 6) | (drdyeStatus << 5) |
-                        (gsel1Status << 4) | (gsel0Status << 3) |
-                        (tdteStatus << 2) | (tpeStatus);
+    uint8_t writeByte = (1 << 7) | (res << 6) | (drdye_enable << 5) | (gsel[1] << 4)
+        | (gsel[0] << 3) | (tdte_enable << 2) | (tpe_enable);
     // reserved bit 1, PC1 bit must be enabled
 
     writeRegisterOneByte(Register::CNTL1, writeByte);
-
-    registerWritingEnabled = 0;
 }
 
-bool KX134::dataReady()
+void KX134::deselect()
 {
-    uint8_t buf[2];
-    readRegister(Register::INS2, buf);
+    _cs.write(1);
 
-    return (buf[1] == 0x10);
+    /* Delay one max-speed clock cycle (100ns) to ensure chip is ready by next write */
+    wait_us(1);
+}
+
+void KX134::select()
+{
+    _cs.write(0);
 }
