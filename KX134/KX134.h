@@ -35,6 +35,7 @@ public:
         RANGE_64G = 0b11
     };
 
+#ifdef KX_SPI
 public:
     /**
      * @brief Construct a new KX134 driver
@@ -441,6 +442,126 @@ private:
     /**
      * @}
      */
+
+#else
+public:
+    KX134(PinName sda, PinName scl);
+
+    bool init();
+
+    bool reset();
+
+    bool checkExistance();
+
+private:
+    /**
+     * @brief The list of registers
+     */
+    enum class Register : uint8_t
+    {
+        MAN_ID = 0x00,
+        PART_ID = 0x01,
+        XADP_L = 0x02,
+        XADP_H = 0x03,
+        YADP_L = 0x04,
+        YADP_H = 0x05,
+        ZADP_L = 0x06,
+        ZADP_H = 0x07,
+        XOUT_L = 0x08,
+        XOUT_H = 0x09,
+        YOUT_L = 0x0A,
+        YOUT_H = 0x0B,
+        ZOUT_L = 0x0C,
+        ZOUT_H = 0x0D,
+        COTR = 0x12,
+        WHO_AM_I = 0x13,
+        TSCP = 0x14,
+        TSPP = 0x15,
+        INS1 = 0x16,
+        INS2 = 0x17,
+        INS3 = 0x18,
+        STATUS_REG = 0x19,
+        INT_REL = 0x1A,
+        CNTL1 = 0x1B,
+        CNTL2 = 0x1C,
+        CNTL3 = 0x1D,
+        CNTL4 = 0x1E,
+        CNTL5 = 0x1F,
+        CNTL6 = 0x20,
+        ODCNTL = 0x21,
+        INC1 = 0x22,
+        INC2 = 0x23,
+        INC3 = 0x24,
+        INC4 = 0x25,
+        INC5 = 0x26,
+        INC6 = 0x27,
+        TILT_TIMER = 0x29,
+        TDTRC = 0x2A,
+        TDTC = 0x2B,
+        TTH = 0x2C,
+        TTL = 0x2D,
+        FTD = 0x2E,
+        STD = 0x2F,
+        TLT = 0x30,
+        TWS = 0x31,
+        FFTH = 0x32,
+        FFC = 0x33,
+        FFCNTL = 0x34,
+        TILT_ANGLE_LL = 0x37,
+        TILT_ANGLE_HL = 0x38,
+        HYST_SET = 0x39,
+        LP_CNTL1 = 0x3A,
+        LP_CNTL2 = 0x3B,
+        WUFTH = 0x49,
+        BTSWUFTH = 0x4A,
+        BTSTH = 0x4B,
+        BTSC = 0x4C,
+        WUFC = 0x4D,
+        SELF_TEST = 0x5D,
+        BUF_CNTL1 = 0x5E,
+        BUF_CNTL2 = 0x5F,
+        BUF_STATUS_1 = 0x60,
+        BUF_STATUS_2 = 0x61,
+        BUF_CLEAR = 0x62,
+        BUF_READ = 0x63,
+        ADP_CNTL1 = 0x64,
+        ADP_CNTL2 = 0x65,
+        ADP_CNTL3 = 0x66,
+        ADP_CNTL4 = 0x67,
+        ADP_CNTL5 = 0x68,
+        ADP_CNTL6 = 0x69,
+        ADP_CNTL7 = 0x6A,
+        ADP_CNTL8 = 0x6B,
+        ADP_CNTL9 = 0x6C,
+        ADP_CNTL10 = 0x6D,
+        ADP_CNTL11 = 0x6E,
+        ADP_CNTL12 = 0x6F,
+        ADP_CNTL13 = 0x70,
+        ADP_CNTL14 = 0x71,
+        ADP_CNTL15 = 0x72,
+        ADP_CNTL16 = 0x73,
+        ADP_CNTL17 = 0x74,
+        ADP_CNTL18 = 0x75,
+        ADP_CNTL19 = 0x76,
+        INTERNAL_0X7F = 0x7F
+    };
+
+private:
+    int writeRegister(Register addr, uint8_t* tx_buf, size_t size = 1);
+    int writeRegisterOneByte(Register addr, uint8_t tx_data); // helper
+
+    int readRegister(Register addr, uint8_t *rx_buf, size_t size = 1);
+    int readRegisterOneByte(Register addr, uint8_t &rx_buf);
+
+    void select();
+    void deselect();
+
+private:
+    I2C i2c_;
+
+    const uint8_t i2c_addr = 0x1E; // if connected to GND, 0x1F if connected to IO_VDD
+
+#endif
 };
 
 #endif // KX134_H

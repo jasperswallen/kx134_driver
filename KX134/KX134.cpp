@@ -3,6 +3,8 @@
 #include <inttypes.h>
 #include <math.h>
 
+#ifdef KX_SPI
+
 #define SPI_FREQ 1000000
 
 /** Set to 1 to enable debug printouts */
@@ -324,3 +326,131 @@ void KX134::select()
 {
     _cs.write(0);
 }
+
+#else
+
+#define KX_I2C_FREQ 100000
+
+KX134::KX134(PinName sda, PinName scl) : i2c_(sda, scl)
+{
+}
+
+bool KX134::init()
+{
+    i2c_.frequency(KX_I2C_FREQ);
+    return reset();
+}
+
+bool KX134::reset()
+{
+    int ack = writeRegisterOneByte(Register::INTERNAL_0X7F, 0x00);
+    if (!ack) return false;
+
+    ack = writeRegisterOneByte(Register::CNTL2, 0x00);
+    if (!ack) return false;
+
+    ack = writeRegisterOneByte(Register::CNTL2, 0x80);
+    if (!ack) return false;
+
+    ThisThread::sleep_for(2ms);
+
+    return checkExistance();
+}
+
+bool KX134::checkExistance()
+{
+    uint8_t who_ami_i;
+    readRegisterOneByte(Register::WHO_AM_I, who_ami_i);
+
+    if(who_ami_i != 0x46)
+    {
+        return false;
+    }
+
+    uint8_t cotr;
+    readRegisterOneByte(Register::COTR, cotr);
+
+    if(cotr != 0x55)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+int KX134::writeRegisterOneByte(Register addr, uint8_t tx_data)
+{
+    return writeRegister(addr, &tx_data);
+}
+
+int KX134::writeRegister(Register addr, uint8_t *tx_data, size_t size)
+{
+    select(); // S
+
+    int ack = i2c_.write(i2c_addr << 1 | 0); // write mode
+
+    if (!ack) return ack;
+
+    ack = i2c_.write(static_cast<uint8_t>(addr));
+
+    if (!ack) return ack;
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        ack = i2c_.write(tx_data[i]);
+
+        if (!ack) return ack;
+    }
+
+    deselect(); // P
+
+    return ack;
+}
+
+int KX134::readRegisterOneByte(Register addr, uint8_t &rx_buf)
+{
+    return readRegister(addr, &rx_buf);
+}
+
+int KX134::readRegister(Register addr, uint8_t *rx_buf, size_t size)
+{
+    select(); // S
+
+    int ack = i2c_.write(i2c_addr << 1 | 0); // write mode
+    if (!ack) return ack;
+
+    ack = i2c_.write(static_cast<uint8_t>(addr));
+    if (!ack) return ack;
+
+    select(); // Sr
+
+    ack = i2c_.write(i2c_addr << 1 | 1); // read mode
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        if (i == size - 1)
+        {
+            rx_buf[i] = i2c_.read(0); // NACK
+        }
+        else
+        {
+            rx_buf[i] = i2c_.read(1); // ACK
+        }
+    }
+
+    deselect(); // P
+
+    return ack;
+}
+
+void KX134::select()
+{
+    i2c_.lock();
+}
+
+void KX134::deselect()
+{
+    i2c_.unlock();
+}
+
+#endif

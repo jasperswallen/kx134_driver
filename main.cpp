@@ -15,6 +15,9 @@
 
 BufferedSerial serial(USBTX, USBRX, BAUDRATE);
 SerialStream<BufferedSerial> pc(serial);
+
+#ifdef KX134_SPI
+
 KX134 new_accel(&pc, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
 
 void KX134TestSuite::test_existance()
@@ -200,3 +203,13 @@ int kx134_test_main()
         }
     }
 }
+
+#else
+KX134 new_accel(NC, NC);
+
+int main()
+{
+    pc.printf("Initialized %u", new_accel.init());
+}
+
+#endif
