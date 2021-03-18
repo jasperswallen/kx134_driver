@@ -8,17 +8,8 @@
 #include <limits>
 
 #include "KX134TestSuite.h"
+#include "KX134Base.h"
 #include "mbed.h"
-#include "SerialStream.h"
-
-#define BAUDRATE 115200
-
-BufferedSerial serial(USBTX, USBRX, BAUDRATE);
-SerialStream<BufferedSerial> pc(serial);
-
-#ifdef KX134_SPI
-
-KX134 new_accel(&pc, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
 
 void KX134TestSuite::test_existance()
 {
@@ -59,19 +50,19 @@ void KX134TestSuite::set_range()
     {
         case 1:
             pc.printf("+-8G\r\n");
-            new_accel.setAccelRange(KX134::Range::RANGE_8G);
+            new_accel.setAccelRange(KX134Base::Range::RANGE_8G);
             break;
         case 2:
             pc.printf("+-16G\r\n");
-            new_accel.setAccelRange(KX134::Range::RANGE_16G);
+            new_accel.setAccelRange(KX134Base::Range::RANGE_16G);
             break;
         case 3:
             pc.printf("+-32G\r\n");
-            new_accel.setAccelRange(KX134::Range::RANGE_32G);
+            new_accel.setAccelRange(KX134Base::Range::RANGE_32G);
             break;
         case 4:
             pc.printf("+-64G\r\n");
-            new_accel.setAccelRange(KX134::Range::RANGE_64G);
+            new_accel.setAccelRange(KX134Base::Range::RANGE_64G);
             break;
         default:
             pc.printf("Invalid Selection\r\n");
@@ -161,7 +152,7 @@ int kx134_test_main()
     }
     printf("Successfully initialized KX134\r\n");
 
-    new_accel.setAccelRange(KX134::Range::RANGE_64G);
+    new_accel.setAccelRange(KX134Base::Range::RANGE_64G);
 
     // test suite harness
     KX134TestSuite harness;
@@ -203,13 +194,3 @@ int kx134_test_main()
         }
     }
 }
-
-#else
-KX134I2C new_accel(nullptr, NC, NC);
-
-int main()
-{
-    pc.printf("Initialized %u", new_accel.init());
-}
-
-#endif

@@ -1,5 +1,5 @@
 /**
- * @file KX134.h
+ * @file KX134Base.h
  * @author Jasper Swallen
  * @brief Software Driver for KX134-1211 accelerometer
  * @date 2021-02-20
@@ -12,14 +12,16 @@
  * https://d10bqar0tuhard.cloudfront.net/en/datasheet/KX134-1211-Specifications-Rev-1.0.pdf
  */
 
-#ifndef KX134_H
-#define KX134_H
+#ifndef KX134BASE_H
+#define KX134BASE_H
+
+#define KX134_DEBUG 0
 
 #include "mbed.h"
 #include "platform/Stream.h"
 
 /**
- * @brief The KX134 Driver
+ * @brief Base class for KX134 driver
  */
 class KX134Base
 {
@@ -36,7 +38,12 @@ public:
     };
 
 public:
-    KX134Base(Stream *debug);
+    /**
+     * @brief Construct a new KX134Base
+     *
+     * @param[in] debug The debug port to output debug messages to
+     */
+    KX134Base(Stream* debug);
 
     /**
      * @brief Performs a software reset
@@ -244,6 +251,25 @@ protected:
     void disableRegisterWriting();
 
     /**
+     * @brief Writes a given register 1 byte
+     * Convenience function, calls writeRegister()
+     *
+     * @param[in] addr The register to write to
+     * @param[in] tx_buf The data to write
+     * @param[out] rx_buf The response data to receive
+     */
+    void writeRegisterOneByte(Register addr, char tx_buf, char* rx_buf = nullptr);
+
+    /**
+     * @brief Reads 1 byte from a given register
+     * Convenience function, calls readRegister()
+     *
+     * @param[in] addr The register to read from
+     * @param[out] rx_buf The buffer to read into
+     */
+    void readRegisterOneByte(Register addr, char& rx_buf);
+
+    /**
      * @brief Reads a given register a given number of bytes
      *
      * @param[in] addr The register to read from
@@ -251,8 +277,6 @@ protected:
      * @param[in] size The number of bytes to read
      */
     virtual void readRegister(Register addr, char* rx_buf, int size = 1) = 0;
-
-    virtual void readRegisterOneByte(Register addr, char &rx_buf);
 
     /**
      * @brief Writes data to a given register
@@ -263,26 +287,6 @@ protected:
      * @param[in] size The number of bytes to write.
      */
     virtual void writeRegister(Register addr, char* data, char* rx_buf = nullptr, int size = 1) = 0;
-
-    /**
-     * @brief Writes a given register 1 byte
-     * Convenience function, calls writeRegister()
-     *
-     * @param[in] addr The register to write to
-     * @param[in] tx_buf The data to write
-     * @param[out] rx_buf The response data to receive
-     */
-    virtual void writeRegisterOneByte(Register addr, char tx_buf, char* rx_buf = nullptr);
-
-    /**
-     * @brief Deselect (push high) chip select pin to let other devices perform transactions
-     */
-    virtual void deselect() = 0;
-
-    /**
-     * @brief Select (push low) chip select pin to allow transactions
-     */
-    virtual void select() = 0;
 
 protected:
     /** @brief The debug port */
@@ -428,114 +432,6 @@ protected:
     /**
      * @}
      */
-
-};
-
-class KX134SPI : public KX134Base
-{
-public:
-    /**
-     * @brief Construct a new KX134 driver
-     *
-     * @param[in] debug The debug port to output debug messages to
-     * @param[in] mosi The SPI MOSI pin
-     * @param[in] miso The SPI MISO pin
-     * @param[in] sclk The SPI SCLK pin
-     * @param[in] cs The chip select pin
-     */
-    KX134SPI(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs);
-
-    /**
-     * @brief Initializes the KX134
-     *
-     * @return true if the init is successful, false otherwise
-     */
-    virtual bool init() override;
-
-protected:
-    /**
-     * @brief Reads a given register a given number of bytes
-     *
-     * @param[in] addr The register to read from
-     * @param[out] rx_buf The buffer to read into
-     * @param[in] size The number of bytes to read
-     */
-    virtual void readRegister(Register addr, char* rx_buf, int size = 1) override;
-
-    /**
-     * @brief Writes data to a given register
-     *
-     * @param[in] addr The register to write to
-     * @param[in] data The data to write
-     * @param[out] rx_buf The response to receive
-     * @param[in] size The number of bytes to write.
-     */
-    virtual void writeRegister(Register addr, char* data, char* rx_buf = nullptr, int size = 1) override;
-
-    /**
-     * @brief Deselect (push high) chip select pin to let other devices perform transactions
-     */
-    virtual void deselect() override;
-
-    /**
-     * @brief Select (push low) chip select pin to allow transactions
-     */
-    virtual void select() override;
-
-private:
-    /** @brief The SPI interface */
-    SPI _spi;
-
-    /** @brief The chip select pin */
-    DigitalOut _cs;
-};
-
-class KX134I2C : public KX134Base
-{
-public:
-    KX134I2C(Stream *debug, PinName sda, PinName scl);
-
-    /**
-     * @brief Initializes the KX134
-     *
-     * @return true if the init is successful, false otherwise
-     */
-    virtual bool init() override;
-
-protected:
-    /**
-     * @brief Reads a given register a given number of bytes
-     *
-     * @param[in] addr The register to read from
-     * @param[out] rx_buf The buffer to read into
-     * @param[in] size The number of bytes to read
-     */
-    virtual void readRegister(Register addr, char* rx_buf, int size = 1) override;
-
-    /**
-     * @brief Writes data to a given register
-     *
-     * @param[in] addr The register to write to
-     * @param[in] data The data to write
-     * @param[out] rx_buf The response to receive
-     * @param[in] size The number of bytes to write.
-     */
-    virtual void writeRegister(Register addr, char* data, char* rx_buf = nullptr, int size = 1) override;
-
-    /**
-     * @brief Deselect (push high) chip select pin to let other devices perform transactions
-     */
-    virtual void deselect() override;
-
-    /**
-     * @brief Select (push low) chip select pin to allow transactions
-     */
-    virtual void select() override;
-
-private:
-    I2C i2c_;
-
-    const uint8_t i2c_addr = 0x1E; // if connected to GND, 0x1F if connected to IO_VDD
 
 };
 

@@ -5,20 +5,34 @@
 #ifndef KX134TESTSUITE_H
 #define KX134TESTSUITE_H
 
-#include "KX134.h"
+#include "SerialStream.h"
 #include "mbed.h"
+
+#define BAUDRATE 115200
+
+BufferedSerial serial(USBTX, USBRX, BAUDRATE);
+SerialStream<BufferedSerial> pc(serial);
+
+#ifdef USING_I2C
+#include "KX134I2C.h"
+
+#define PIN_I2C_SDA NC
+#define PIN_I2C_SCL NC
+
+KX134I2C new_accel(&pc, PIN_I2C_SDA, PIN_I2C_SCL, 0x1F);
+#else
+#include "KX134SPI.h"
 
 #define PIN_SPI_MOSI PB_5
 #define PIN_SPI_MISO PB_4
-#define PIN_SPI_CS PA_4
 #define PIN_SPI_SCK PB_3
-#define PIN_INT1 PA_0 // placeholder
-#define PIN_INT2 PA_0 // placeholder
-#define PIN_RST PA_0  // placeholder
+#define PIN_SPI_CS PA_4
 
+KX134SPI new_accel(&pc, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
+#endif
 class KX134TestSuite
 {
-  public:
+public:
     void test_existance();
     void set_hz();
     void set_range();
