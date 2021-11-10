@@ -5,13 +5,7 @@
 #ifndef KX134TESTSUITE_H
 #define KX134TESTSUITE_H
 
-#include "SerialStream.h"
 #include "mbed.h"
-
-#define BAUDRATE 115200
-
-BufferedSerial serial(USBTX, USBRX, BAUDRATE);
-SerialStream<BufferedSerial> pc(serial);
 
 #ifdef USING_I2C
 #include "KX134I2C.h"
@@ -19,7 +13,7 @@ SerialStream<BufferedSerial> pc(serial);
 #define PIN_I2C_SDA NC
 #define PIN_I2C_SCL NC
 
-KX134I2C new_accel(&pc, PIN_I2C_SDA, PIN_I2C_SCL, 0x1F);
+KX134I2C new_accel(PIN_I2C_SDA, PIN_I2C_SCL, 0x1F);
 #else
 #include "KX134SPI.h"
 
@@ -28,7 +22,7 @@ KX134I2C new_accel(&pc, PIN_I2C_SDA, PIN_I2C_SCL, 0x1F);
 #define PIN_SPI_SCK PB_3
 #define PIN_SPI_CS PA_4
 
-KX134SPI new_accel(&pc, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
+KX134SPI new_accel(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
 #endif
 class KX134TestSuite
 {

@@ -2,8 +2,8 @@
 
 #define SPI_FREQ 1000000
 
-KX134SPI::KX134SPI(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs)
-    : KX134Base(debug)
+KX134SPI::KX134SPI(PinName mosi, PinName miso, PinName sclk, PinName cs)
+    : KX134Base()
     , _spi(mosi, miso, sclk)
     , _cs(cs)
 {
@@ -26,7 +26,7 @@ void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
 
     /* Select the register to read */
 #if KX134_DEBUG
-    _debug->printf("Selected register 0x%" PRIX8 " and received 0x%X\r\n",
+    printf("Selected register 0x%" PRIX8 " and received 0x%X\r\n",
         static_cast<uint8_t>(addr),
 #endif
         _spi.write(static_cast<uint8_t>(addr) | 0x80)
@@ -39,7 +39,7 @@ void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
     {
         rx_buf[i] = _spi.write(0x00);
 #if KX134_DEBUG
-        _debug->printf(
+        printf(
             "Read 0x%X from register 0x%" PRIX8 "\r\n", rx_buf[i], static_cast<uint8_t>(addr));
 #endif
     }
@@ -58,7 +58,7 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
         {
             rx_buf[i] = _spi.write(tx_buf[i]);
 #if KX134_DEBUG
-            _debug->printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
+            printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
                 tx_buf[i],
                 static_cast<uint8_t>(addr),
                 rx_buf[i]);
@@ -67,7 +67,7 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
         else
         {
 #if KX134_DEBUG
-            _debug->printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
+            printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
                 tx_buf[i],
                 static_cast<uint8_t>(addr),
 #endif

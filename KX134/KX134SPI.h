@@ -12,13 +12,12 @@ public:
     /**
      * @brief Construct a new KX134 driver using the SPI communication protocol
      *
-     * @param[in] debug The debug port to output debug messages to
      * @param[in] mosi The SPI MOSI pin
      * @param[in] miso The SPI MISO pin
      * @param[in] sclk The SPI SCLK pin
      * @param[in] cs The chip select pin
      */
-    KX134SPI(Stream* debug, PinName mosi, PinName miso, PinName sclk, PinName cs);
+    KX134SPI(PinName mosi, PinName miso, PinName sclk, PinName cs);
 
     /**
      * @brief Initializes the KX134

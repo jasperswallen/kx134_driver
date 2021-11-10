@@ -1,6 +1,8 @@
 {
     "target_overrides": {
         "*": {
+            "platform.stdio-baud-rate": 115200,
+            "platform.stdio-buffered-serial": 1,
             "target.printf_lib": "std",
             "mbed-trace.enable": "1",
             "mbed-trace.max-level": "TRACE_LEVEL_INFO"

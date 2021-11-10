@@ -17,7 +17,7 @@ public:
      * @param[in] scl The I2C SCL pin
      * @param[in] i2c_addr_ The I2C chip address
      */
-    KX134I2C(Stream *debug, PinName sda, PinName scl, uint8_t i2c_addr_);
+    KX134I2C(PinName sda, PinName scl, uint8_t i2c_addr_);
 
     /**
      * @brief Initializes the KX134

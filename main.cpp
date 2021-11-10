@@ -15,12 +15,12 @@ void KX134TestSuite::test_existance()
 {
     if (new_accel.checkExistence())
     {
-        pc.printf("[SUCCESS]\r\n");
+        printf("[SUCCESS]\r\n");
     }
     else
     {
-        pc.printf("[FAILURE]\r\n");
-        pc.printf("Is the device plugged in?\r\n");
+        printf("[FAILURE]\r\n");
+        printf("Is the device plugged in?\r\n");
     }
 }
 
@@ -28,8 +28,8 @@ void KX134TestSuite::test_existance()
 void KX134TestSuite::set_hz()
 {
     int hz = -1;
-    pc.printf("Enter output data rate (hz): ");
-    pc.scanf("%d", &hz);
+    printf("Enter output data rate (hz): ");
+    scanf("%d", &hz);
 
     new_accel.setOutputDataRateHz(hz);
 }
@@ -38,34 +38,34 @@ void KX134TestSuite::set_hz()
 void KX134TestSuite::set_range()
 {
     int range = -1;
-    pc.printf("Select range:\r\n");
-    pc.printf("1.  +-8G\r\n");
-    pc.printf("2.  +-16G\r\n");
-    pc.printf("3.  +-32G\r\n");
-    pc.printf("4.  +-64G\r\n");
-    pc.scanf("%d", &range);
+    printf("Select range:\r\n");
+    printf("1.  +-8G\r\n");
+    printf("2.  +-16G\r\n");
+    printf("3.  +-32G\r\n");
+    printf("4.  +-64G\r\n");
+    scanf("%d", &range);
 
-    pc.printf("Setting range: ");
+    printf("Setting range: ");
     switch (range)
     {
         case 1:
-            pc.printf("+-8G\r\n");
+            printf("+-8G\r\n");
             new_accel.setAccelRange(KX134Base::Range::RANGE_8G);
             break;
         case 2:
-            pc.printf("+-16G\r\n");
+            printf("+-16G\r\n");
             new_accel.setAccelRange(KX134Base::Range::RANGE_16G);
             break;
         case 3:
-            pc.printf("+-32G\r\n");
+            printf("+-32G\r\n");
             new_accel.setAccelRange(KX134Base::Range::RANGE_32G);
             break;
         case 4:
-            pc.printf("+-64G\r\n");
+            printf("+-64G\r\n");
             new_accel.setAccelRange(KX134Base::Range::RANGE_64G);
             break;
         default:
-            pc.printf("Invalid Selection\r\n");
+            printf("Invalid Selection\r\n");
             break;
     }
 }
@@ -160,17 +160,17 @@ int kx134_test_main()
     while (1)
     {
         int test = -1;
-        pc.printf("\r\n\nHamster Acceleromter Test Suite:\r\n");
+        printf("\r\n\nHamster Acceleromter Test Suite:\r\n");
 
-        pc.printf("Select a test: \n\r");
-        pc.printf("0.  Exit Test Suite\r\n");
-        pc.printf("1.  Device alive?\r\n");
-        pc.printf("2.  Set Output Data Rate\r\n");
-        pc.printf("3.  Set Range\r\n");
-        pc.printf("4.  Read Data & Standard Deviation\r\n");
+        printf("Select a test: \n\r");
+        printf("0.  Exit Test Suite\r\n");
+        printf("1.  Device alive?\r\n");
+        printf("2.  Set Output Data Rate\r\n");
+        printf("3.  Set Range\r\n");
+        printf("4.  Read Data & Standard Deviation\r\n");
 
-        pc.scanf("%d", &test);
-        pc.printf("Running test %d:\r\n\n", test);
+        scanf("%d", &test);
+        printf("Running test %d:\r\n\n", test);
 
         switch (test)
         {
@@ -189,7 +189,7 @@ int kx134_test_main()
                 harness.test_stddev();
                 break;
             default:
-                pc.printf("Invalid test number\r\n");
+                printf("Invalid test number\r\n");
                 break;
         }
     }

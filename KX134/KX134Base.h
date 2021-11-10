@@ -18,7 +18,6 @@
 #define KX134_DEBUG 0
 
 #include "mbed.h"
-#include "platform/Stream.h"
 
 /**
  * @brief Base class for KX134 driver
@@ -40,10 +39,8 @@ public:
 public:
     /**
      * @brief Construct a new KX134Base
-     *
-     * @param[in] debug The debug port to output debug messages to
      */
-    KX134Base(Stream* debug);
+    KX134Base();
 
     /**
      * @brief Performs a software reset
@@ -289,9 +286,6 @@ protected:
     virtual void writeRegister(Register addr, char* data, char* rx_buf = nullptr, int size = 1) = 0;
 
 protected:
-    /** @brief The debug port */
-    Stream* _debug;
-
     /** @brief Calibration offsets in LSB */
     int16_t _offsets[3];
 
