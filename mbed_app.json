@@ -1,0 +1,9 @@
+{
+    "target_overrides": {
+        "*": {
+            "target.printf_lib": "std",
+            "mbed-trace.enable": "1",
+            "mbed-trace.max-level": "TRACE_LEVEL_INFO"
+        }
+    }
+}

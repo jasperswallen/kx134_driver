@@ -1,0 +1,8 @@
+connectivity/*
+storage/*
+!storage/blockdevice/*
+features/*
+drivers/device_key/*
+
+# disable USB
+drivers/usb/*
