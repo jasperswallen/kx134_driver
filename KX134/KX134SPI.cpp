@@ -1,6 +1,9 @@
 #include "KX134SPI.h"
+#include <cinttypes>
 
 #define SPI_FREQ 1000000
+
+volatile bool KX134SPI::event_complete;
 
 KX134SPI::KX134SPI(PinName mosi, PinName miso, PinName sclk, PinName cs)
     : KX134Base()
@@ -25,15 +28,16 @@ void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
     select();
 
     /* Select the register to read */
-#if KX134_DEBUG
-    printf("Selected register 0x%" PRIX8 " and received 0x%X\r\n",
-        static_cast<uint8_t>(addr),
-#endif
-        _spi.write(static_cast<uint8_t>(addr) | 0x80)
-#if KX134_DEBUG
-    )
-#endif
-        ;
+        Timer t;
+        t.start();
+        uint8_t buf[1] = {static_cast<uint8_t>(addr) | 0x80};
+        uint8_t fakerxbuf[1];
+        event_complete = 0;
+        int transferresult = _spi.transfer(buf, 1, fakerxbuf, 1, transaction_complete);
+        printf("The value of transfer is %d\n", transferresult);
+        while(!event_complete){}
+        t.stop();
+        printf("the time taken was %d seconds\n", t.read());
 
     for (int i = 0; i < size; ++i)
     {
@@ -91,3 +95,8 @@ void KX134SPI::deselect()
 }
 
 void KX134SPI::select() { _cs.write(0); }
+
+void KX134SPI::transaction_complete(int event){
+    printf("%s\n", "Am I in the callback?");
+    event_complete = true;
+}

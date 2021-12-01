@@ -3,8 +3,7 @@
 #include <inttypes.h>
 #include <math.h>
 
-/** Set to 1 to enable debug printouts */
-#define KX134_DEBUG 0
+
 
 KX134Base::KX134Base()
     : res(1)

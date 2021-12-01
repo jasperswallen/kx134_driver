@@ -15,7 +15,7 @@
 #ifndef KX134BASE_H
 #define KX134BASE_H
 
-#define KX134_DEBUG 0
+#define KX134_DEBUG 1
 
 #include "mbed.h"
 

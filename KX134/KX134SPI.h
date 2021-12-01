@@ -56,12 +56,20 @@ protected:
      */
     void select();
 
+    /**
+     * @brief callback for transmitting and recieving
+     */
+    static void transaction_complete(int event);
+
 private:
     /** @brief The SPI interface */
     SPI _spi;
 
     /** @brief The chip select pin */
     DigitalOut _cs;
+
+    /** @brief Boolean for callback */
+    static volatile bool event_complete;
 };
 
 #endif
