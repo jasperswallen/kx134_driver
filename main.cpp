@@ -11,7 +11,7 @@
 #include "KX134Base.h"
 #include "mbed.h"
 
-void KX134TestSuite::test_existance()
+void KX134TestSuite::test_existence()
 {
     if (new_accel.checkExistence())
     {
@@ -30,6 +30,8 @@ void KX134TestSuite::set_hz()
     int hz = -1;
     printf("Enter output data rate (hz): ");
     scanf("%d", &hz);
+    getc(stdin);
+    printf("\r\nSetting ODR to %d hz\r\n", hz);
 
     new_accel.setOutputDataRateHz(hz);
 }
@@ -44,6 +46,7 @@ void KX134TestSuite::set_range()
     printf("3.  +-32G\r\n");
     printf("4.  +-64G\r\n");
     scanf("%d", &range);
+    getc(stdin);
 
     printf("Setting range: ");
     switch (range)
@@ -148,6 +151,7 @@ int kx134_test_main()
     if (!new_accel.init())
     {
         printf("Failed to initialize KX134\r\n");
+        ThisThread::sleep_for(1s);
         return 1;
     }
     printf("Successfully initialized KX134\r\n");
@@ -160,7 +164,7 @@ int kx134_test_main()
     while (1)
     {
         int test = -1;
-        printf("\r\n\nHamster Acceleromter Test Suite:\r\n");
+        printf("\r\n\nHamster Accelerometer Test Suite:\r\n");
 
         printf("Select a test: \n\r");
         printf("0.  Exit Test Suite\r\n");
@@ -170,6 +174,7 @@ int kx134_test_main()
         printf("4.  Read Data & Standard Deviation\r\n");
 
         scanf("%d", &test);
+        getc(stdin);
         printf("Running test %d:\r\n\n", test);
 
         switch (test)
@@ -177,7 +182,7 @@ int kx134_test_main()
             case 0:
                 return 0;
             case 1:
-                harness.test_existance();
+                harness.test_existence();
                 break;
             case 2:
                 harness.set_hz();

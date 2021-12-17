@@ -27,7 +27,7 @@ KX134SPI new_accel(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
 class KX134TestSuite
 {
 public:
-    void test_existance();
+    void test_existence();
     void set_hz();
     void set_range();
     void test_stddev();
