@@ -145,10 +145,11 @@ int main()
 int kx134_test_main()
 #endif
 {
-    if (!new_accel.init())
+    /*while (!new_accel.init())
     {
         printf("Failed to initialize KX134\r\n");
-    }
+    }*/
+    new_accel.init();
     printf("Successfully initialized KX134\r\n");
 
     new_accel.setAccelRange(KX134Base::Range::RANGE_64G);

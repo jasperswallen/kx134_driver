@@ -4,6 +4,7 @@
 #define SPI_FREQ 1000000
 
 volatile bool KX134SPI::event_complete;
+volatile int eventResult;
 
 KX134SPI::KX134SPI(PinName mosi, PinName miso, PinName sclk, PinName cs)
     : KX134Base()
@@ -30,23 +31,46 @@ void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
     /* Select the register to read */
         Timer t;
         t.start();
-        uint8_t buf[1] = {static_cast<uint8_t>(addr) | 0x80};
-        uint8_t fakerxbuf[1];
+        uint8_t buf[size + 1] = {};
+        uint8_t tmprx[size + 1] = {};
+        buf[0] = (uint8_t(addr) | 0x80);
         event_complete = 0;
-        int transferresult = _spi.transfer(buf, 1, fakerxbuf, 1, transaction_complete);
+        int transferresult = _spi.transfer(buf, size + 1, tmprx, size + 1, transaction_complete);
         printf("The value of transfer is %d\n", transferresult);
         while(!event_complete){}
         t.stop();
+        for(int i = 1; i < size + 1; i++){
+            rx_buf[i-1] = tmprx[i];
+            printf("element %d is %X\n", i, tmprx[i]);
+        }
+        printf("tmprx[0] is %X\n", tmprx[0]);
+        printf("The event result is %d\n", eventResult);
         printf("the time taken was %f seconds\n", t.read());
 
-    for (int i = 0; i < size; ++i)
+        /*deselect();
+        select();
+        char buf2[size] = {};
+        event_complete = 0;
+        t.reset();
+        t.start();
+        int transferresult2 = _spi.transfer(buf2, size, rx_buf, size, transaction_complete);
+        printf("The value of transfer2 is %d\n", transferresult2);
+        while(!event_complete){}
+        t.stop();
+        printf("The time taken was %f seconds\n", t.read());
+        printf("The event result is %d\n", eventResult);
+        for(int i = 0; i < size; i++){
+            printf("The rx_buf is %X\n", rx_buf[i]);
+        }*/
+
+    /*for (int i = 0; i < size; ++i)
     {
         rx_buf[i] = _spi.write(0x00);
 #if KX134_DEBUG
         printf(
             "Read 0x%X from register 0x%" PRIX8 "\r\n", rx_buf[i], static_cast<uint8_t>(addr));
 #endif
-    }
+    }*/
 
     deselect();
 }
@@ -97,5 +121,6 @@ void KX134SPI::deselect()
 void KX134SPI::select() { _cs.write(0); }
 
 void KX134SPI::transaction_complete(int event){
+    eventResult = event;
     event_complete = true;
 }
