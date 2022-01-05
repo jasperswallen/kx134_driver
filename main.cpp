@@ -148,7 +148,6 @@ int kx134_test_main()
     if (!new_accel.init())
     {
         printf("Failed to initialize KX134\r\n");
-        return 1;
     }
     printf("Successfully initialized KX134\r\n");
 

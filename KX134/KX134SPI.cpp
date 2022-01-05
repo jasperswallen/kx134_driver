@@ -37,7 +37,7 @@ void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
         printf("The value of transfer is %d\n", transferresult);
         while(!event_complete){}
         t.stop();
-        printf("the time taken was %d seconds\n", t.read());
+        printf("the time taken was %f seconds\n", t.read());
 
     for (int i = 0; i < size; ++i)
     {
@@ -97,6 +97,5 @@ void KX134SPI::deselect()
 void KX134SPI::select() { _cs.write(0); }
 
 void KX134SPI::transaction_complete(int event){
-    printf("%s\n", "Am I in the callback?");
     event_complete = true;
 }
