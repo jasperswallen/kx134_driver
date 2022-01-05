@@ -33,7 +33,7 @@ void KX134SPI::readRegister(Register addr, char* rx_buf, int size)
         t.start();
         uint8_t buf[size + 1] = {};
         uint8_t tmprx[size + 1] = {};
-        buf[0] = (uint8_t(addr) | 0x80);
+        buf[0] = (uint8_t(addr) | 0x80); //dont do the or when writing
         event_complete = 0;
         int transferresult = _spi.transfer(buf, size + 1, tmprx, size + 1, transaction_complete);
         printf("The value of transfer is %d\n", transferresult);
@@ -79,7 +79,17 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
 {
     select();
 
-    _spi.write(static_cast<uint8_t>(addr)); // select register
+    uint8_t faketx[size + 1] = {};
+    uint8_t fakerx[size + 1] = {}; 
+    for(int i = 1; i < size + 1; i++){
+        faketx[i - 1] = tx_buf[i];
+    }
+    event_complete = 0;
+    int inittransfer = _spi.transfer(faketx, size + 1, rx_buf, size + 1, transaction_complete);
+    while(!event_complete){}
+    
+    //old way
+    /*_spi.write(static_cast<uint8_t>(addr)); // select register
     for (int i = 0; i < size; ++i)
     {
         if (rx_buf != nullptr)
@@ -87,7 +97,7 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
             rx_buf[i] = _spi.write(tx_buf[i]);
 #if KX134_DEBUG
             printf("Wrote 0x%X to register 0x%" PRIX8 " and received 0x%X\r\n",
-                tx_buf[i],
+                tx_buf[i], //copy txbuf into something to send to spi transfer before 
                 static_cast<uint8_t>(addr),
                 rx_buf[i]);
 #endif
@@ -105,7 +115,7 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
 #endif
                 ;
         }
-    }
+    }*/
 
     deselect();
 }
