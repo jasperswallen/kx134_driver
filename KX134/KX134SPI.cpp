@@ -79,8 +79,8 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
 {
     select();
 
-    uint8_t faketx[size + 1] = {};
-    uint8_t fakerx[size + 1] = {}; 
+    char faketx[size + 1] = {};
+    char fakerx[size + 1] = {}; 
     for(int i = 1; i < size + 1; i++){
         faketx[i - 1] = tx_buf[i];
     }
