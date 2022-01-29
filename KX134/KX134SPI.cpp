@@ -80,9 +80,10 @@ void KX134SPI::writeRegister(Register addr, char* tx_buf, char* rx_buf, int size
     select();
 
     char faketx[size + 1] = {};
-    char fakerx[size + 1] = {}; 
+    char fakerx[size + 1] = {};
+    faketx[0] = static_cast<char>(addr); 
     for(int i = 1; i < size + 1; i++){
-        faketx[i - 1] = tx_buf[i];
+        faketx[i] = tx_buf[i - 1];
     }
     event_complete = 0;
     int inittransfer = _spi.transfer(faketx, size + 1, rx_buf, size + 1, transaction_complete);

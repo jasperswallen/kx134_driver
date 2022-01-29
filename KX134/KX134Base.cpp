@@ -92,6 +92,9 @@ void KX134Base::getAccelerations(int16_t* output)
 bool KX134Base::dataReady()
 {
     char buf;
+    printf("want to continue?");
+    char c;
+    scanf("%c", &c);
     readRegisterOneByte(Register::INS2, buf);
 
 #if KX134_DEBUG
