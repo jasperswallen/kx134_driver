@@ -10,14 +10,15 @@ include(cmake/UploadMethodConfig.cmake)
 
 include(mbed-cmake/mbed-cmake.cmake)
 
-project(KX134-Driver LANGUAGES NONE)
+project(KX134-Driver LANGUAGES C CXX)
 
 # recurse to subdirectories
 # -------------------------------------------------------------
 
-add_subdirectory(KX134)
-add_mbed_executable(kx134_example main.cpp)
-target_link_libraries(kx134_example KX134)
+# add_subdirectory(KX134)
+add_mbed_executable(kx134_example main.cpp stm32h7_hal_msp.c)
+
+# target_link_libraries(kx134_example KX134)
 
 # build report
 # -------------------------------------------------------------

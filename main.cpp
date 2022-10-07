@@ -1,228 +1,500 @@
-//
-// Created by Jasper Swallen on 2-15-21
-//
+/**
+  ******************************************************************************
+  * @file    SPI/SPI_FullDuplex_ComDMA/Src/main.c
+  * @author  MCD Application Team
+  * @brief   This sample code shows how to use STM32H7xx SPI HAL API to transmit
+  *          and receive a data buffer with a communication process based on
+  *          DMA transfer.
+  *          The communication is done using 2 Boards.
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2017 STMicroelectronics.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by ST under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
+  *
+  ******************************************************************************
+  */
 
-#include <algorithm>
-#include <cinttypes>
-#include <cmath>
-#include <limits>
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
 
-#include "KX134TestSuite.h"
-#include "KX134Base.h"
 #include "mbed.h"
 
-// void KX134TestSuite::test_existance()
-// {
-//     if (new_accel.checkExistence())
-//     {
-//         printf("[SUCCESS]\r\n");
-//     }
-//     else
-//     {
-//         printf("[FAILURE]\r\n");
-//         printf("Is the device plugged in?\r\n");
-//     }
-// }
+/** @addtogroup STM32H7xx_HAL_Examples
+  * @{
+  */
 
-// // This test pairs well with the standard deviation test
-// void KX134TestSuite::set_hz()
-// {
-//     int hz = -1;
-//     printf("Enter output data rate (hz): ");
-//     scanf("%d", &hz);
+/** @addtogroup SPI_FullDuplex_ComDMA
+  * @{
+  */
 
-//     new_accel.setOutputDataRateHz(hz);
-// }
+/* Private typedef -----------------------------------------------------------*/
+/* Private define ------------------------------------------------------------*/
+enum {
+  TRANSFER_WAIT,
+  TRANSFER_COMPLETE,
+  TRANSFER_ERROR
+};
 
-// // This test pairs well with the standard deviation test
-// void KX134TestSuite::set_range()
-// {
-//     int range = -1;
-//     printf("Select range:\r\n");
-//     printf("1.  +-8G\r\n");
-//     printf("2.  +-16G\r\n");
-//     printf("3.  +-32G\r\n");
-//     printf("4.  +-64G\r\n");
-//     scanf("%d", &range);
+/* Private macro -------------------------------------------------------------*/
+/* Uncomment this line to use the board as master, if not it is used as slave */
+#define MASTER_BOARD
 
-//     printf("Setting range: ");
-//     switch (range)
-//     {
-//         case 1:
-//             printf("+-8G\r\n");
-//             new_accel.setAccelRange(KX134Base::Range::RANGE_8G);
-//             break;
-//         case 2:
-//             printf("+-16G\r\n");
-//             new_accel.setAccelRange(KX134Base::Range::RANGE_16G);
-//             break;
-//         case 3:
-//             printf("+-32G\r\n");
-//             new_accel.setAccelRange(KX134Base::Range::RANGE_32G);
-//             break;
-//         case 4:
-//             printf("+-64G\r\n");
-//             new_accel.setAccelRange(KX134Base::Range::RANGE_64G);
-//             break;
-//         default:
-//             printf("Invalid Selection\r\n");
-//             break;
-//     }
-// }
+/* Private variables ---------------------------------------------------------*/
+/* SPI handler declaration */
+SPI_HandleTypeDef SpiHandle;
 
-// void KX134TestSuite::test_stddev()
-// {
-//     const int numTrials = 200;
-//     float gravs[numTrials][3];
+/* Buffer used for transmission */
+const uint8_t aTxBuffer[] = "****SPI - Two Boards communication based on DMA **** SPI Message ********* SPI Message *********";
 
-//     for (size_t trialIndex = 0; trialIndex < numTrials; ++trialIndex)
-//     {
-//         while (!new_accel.dataReady())
-//             ;
+/* Buffer used for reception */
+#define BUFFER_ALIGNED_SIZE (((BUFFERSIZE+31)/32)*32)
+ALIGN_32BYTES(uint8_t aRxBuffer[BUFFER_ALIGNED_SIZE]);
 
-//         int16_t output[3];
-//         new_accel.getAccelerations(output);
-//         float ax = new_accel.convertRawToGravs(output[0]);
-//         float ay = new_accel.convertRawToGravs(output[1]);
-//         float az = new_accel.convertRawToGravs(output[2]);
+/* transfer state */
+__IO uint32_t wTransferState = TRANSFER_WAIT;
 
-//         printf("KX134 Accel: X: %" PRIi16 " LSB, Y: %" PRIi16 " LSB, Z: %" PRIi16 " LSB \r\n",
-//             output[0],
-//             output[1],
-//             output[2]);
-//         printf("KX134 Accel in Gravs: X: %f g, Y: %f g, Z: %f g \r\n", ax, ay, az);
+/* Private function prototypes -----------------------------------------------*/
+static void SystemClock_Config(void);
+static void Error_Handler(void);
+static uint16_t Buffercmp(uint8_t *pBuffer1, uint8_t *pBuffer2, uint16_t BufferLength);
+static void CPU_CACHE_Enable(void);
 
-//         gravs[trialIndex][0] = ax;
-//         gravs[trialIndex][1] = ay;
-//         gravs[trialIndex][2] = az;
-//     }
+/* Private functions ---------------------------------------------------------*/
 
-//     float average[3] = { 0 };
-//     float maxGravs[3] = { 0 };
-//     float minGravs[3] = { std::numeric_limits<float>::max() };
+DigitalOut led_1(LED1, 0);
+DigitalOut led_2(LED2, 0);
+DigitalOut led_3(LED3, 0);
 
-//     for (size_t trialIndex = 0; trialIndex < numTrials; ++trialIndex)
-//     {
-//         for (int i = 0; i < 3; ++i)
-//         {
-//             average[i] += gravs[trialIndex][i];
-//             maxGravs[i] = std::max(gravs[trialIndex][i], maxGravs[i]);
-//             minGravs[i] = std::min(gravs[trialIndex][i], minGravs[i]);
-//         }
-//     }
-
-//     for (int i = 0; i < 3; ++i)
-//     {
-//         average[i] /= numTrials;
-//     }
-
-//     float variance[3] = { 0 };
-//     for (size_t trialIndex = 0; trialIndex < numTrials; ++trialIndex)
-//     {
-//         for (int i = 0; i < 3; ++i)
-//         {
-//             variance[i] += std::pow(gravs[trialIndex][i] - average[i], 2);
-//         }
-//     }
-
-//     float stdDeviation[3];
-//     for (int i = 0; i < 3; ++i)
-//     {
-//         variance[i] /= numTrials - 1;
-//         stdDeviation[i] = std::sqrt(variance[i]);
-//     }
-
-//     printf("Average Gravs: %f x, %f y, %f z\n", average[0], average[1], average[2]);
-//     printf("Standard Deviation: %f x, %f y, %f z\n",
-//         stdDeviation[0],
-//         stdDeviation[1],
-//         stdDeviation[2]);
-// }
-
-// #if HAMSTER_SIMULATOR != 1
-// int main()
-// #else
-// int kx134_test_main()
-// #endif
-// {
-//     /*while (!new_accel.init())
-//     {
-//         printf("Failed to initialize KX134\r\n");
-//     }*/
-//     new_accel.init();
-//     printf("Successfully initialized KX134\r\n");
-
-//     new_accel.setAccelRange(KX134Base::Range::RANGE_64G);
-
-//     // test suite harness
-//     KX134TestSuite harness;
-
-//     while (1)
-//     {
-//         int test = -1;
-//         printf("\r\n\nHamster Acceleromter Test Suite:\r\n");
-
-//         printf("Select a test: \n\r");
-//         printf("0.  Exit Test Suite\r\n");
-//         printf("1.  Device alive?\r\n");
-//         printf("2.  Set Output Data Rate\r\n");
-//         printf("3.  Set Range\r\n");
-//         printf("4.  Read Data & Standard Deviation\r\n");
-
-//         scanf("%d", &test);
-//         printf("Running test %d:\r\n\n", test);
-
-//         switch (test)
-//         {
-//             case 0:
-//                 return 0;
-//             case 1:
-//                 harness.test_existance();
-//                 break;
-//             case 2:
-//                 harness.set_hz();
-//                 break;
-//             case 3:
-//                 harness.set_range();
-//                 break;
-//             case 4:
-//                 harness.test_stddev();
-//                 break;
-//             default:
-//                 printf("Invalid test number\r\n");
-//                 break;
-//         }
-//     }
-// }
-
-volatile bool event_complete = false;
-volatile int event_result = -1;
-
-static int callback_func(int event)
+/**
+  * @brief  Main program
+  * @param  None
+  * @retval None
+  */
+int main(void)
 {
-    event_complete = true;
-    event_result = event;
+  /* Enable the CPU Cache */
+  CPU_CACHE_Enable();
+
+  /* STM32H7xx HAL library initialization:
+       - Systick timer is configured by default as source of time base, but user 
+         can eventually implement his proper time base source (a general purpose 
+         timer for example or other time source), keeping in mind that Time base 
+         duration should be kept 1ms since PPP_TIMEOUT_VALUEs are defined and 
+         handled in milliseconds basis.
+       - Set NVIC Group Priority to 4
+       - Low Level Initialization
+     */
+  HAL_Init();
+
+  /* Configure the system clock to 400 MHz */
+//   SystemClock_Config();
+
+  /* Configure LED1, LED2 and LED3 */
+
+  /*##-1- Configure the SPI peripheral #######################################*/
+  /* Set the SPI parameters */
+  SpiHandle.Instance               = SPIx;
+  SpiHandle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  SpiHandle.Init.Direction         = SPI_DIRECTION_2LINES;
+  SpiHandle.Init.CLKPhase          = SPI_PHASE_1EDGE;
+  SpiHandle.Init.CLKPolarity       = SPI_POLARITY_LOW;
+  SpiHandle.Init.DataSize          = SPI_DATASIZE_8BIT;
+  SpiHandle.Init.FirstBit          = SPI_FIRSTBIT_MSB;
+  SpiHandle.Init.TIMode            = SPI_TIMODE_DISABLE;
+  SpiHandle.Init.CRCCalculation    = SPI_CRCCALCULATION_DISABLE;
+  SpiHandle.Init.CRCPolynomial     = 7;
+  SpiHandle.Init.CRCLength         = SPI_CRC_LENGTH_8BIT;
+  SpiHandle.Init.NSS               = SPI_NSS_SOFT;
+  SpiHandle.Init.NSSPMode          = SPI_NSS_PULSE_DISABLE;
+  SpiHandle.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_ENABLE;  /* Recommanded setting to avoid glitches */
+
+#ifdef MASTER_BOARD
+  SpiHandle.Init.Mode = SPI_MODE_MASTER;
+#else
+  SpiHandle.Init.Mode = SPI_MODE_SLAVE;
+#endif /* MASTER_BOARD */
+
+  if(HAL_SPI_Init(&SpiHandle) != HAL_OK)
+  {
+    /* Initialization Error */
+    Error_Handler();
+  }
+
+#ifdef MASTER_BOARD
+  /* Configure User push-button button */
+//   BSP_PB_Init(BUTTON_USER,BUTTON_MODE_GPIO);
+  DigitalIn user_button(USER_BUTTON);
+  /* Wait for User push-button press before starting the Communication */
+  while (!user_button)
+  {
+    // BSP_LED_Toggle(LED1);
+    led_1 = !led_1;
+    HAL_Delay(100);
+  }
+//   BSP_LED_Off(LED1);
+  led_1 = false;
+#endif /* MASTER_BOARD */
+
+  /*##-2- Start the Full Duplex Communication process ########################*/  
+  /* While the SPI in TransmitReceive process, user can transmit data through 
+     "aTxBuffer" buffer & receive data through "aRxBuffer" */
+  if(HAL_SPI_TransmitReceive_DMA(&SpiHandle, (uint8_t*)aTxBuffer, (uint8_t *)aRxBuffer, BUFFERSIZE) != HAL_OK)
+  {
+    /* Transfer error in transmission process */
+    Error_Handler();
+  }
+
+  /*##-3- Wait for the end of the transfer ###################################*/  
+  /*  Before starting a new communication transfer, you must wait the callback call 
+      to get the transfer complete confirmation or an error detection.
+      For simplicity reasons, this example is just waiting till the end of the 
+      transfer, but application may perform other tasks while transfer operation
+      is ongoing. */  
+  while (wTransferState == TRANSFER_WAIT)
+  {
+  }
+  
+  /* Invalidate cache prior to access by CPU */
+  SCB_InvalidateDCache_by_Addr ((uint32_t *)aRxBuffer, BUFFERSIZE);
+
+  switch(wTransferState)
+  {
+    case TRANSFER_COMPLETE :
+      /*##-4- Compare the sent and received buffers ##############################*/
+      if(Buffercmp((uint8_t*)aTxBuffer, (uint8_t*)aRxBuffer, BUFFERSIZE))
+      {
+        /* Processing Error */
+        Error_Handler();     
+      }
+      break;
+    default : 
+      Error_Handler();
+      break;
+  }
+  
+  /* Infinite loop */  
+  while (1)
+  {
+  }
 }
 
-int main()
+/**
+  * @brief  System Clock Configuration
+  *         The system Clock is configured as follow : 
+  *            System Clock source            = PLL (HSE BYPASS)
+  *            SYSCLK(Hz)                     = 400000000 (CPU Clock)
+  *            HCLK(Hz)                       = 200000000 (AXI and AHBs Clock)
+  *            AHB Prescaler                  = 2
+  *            D1 APB3 Prescaler              = 2 (APB3 Clock  100MHz)
+  *            D2 APB1 Prescaler              = 2 (APB1 Clock  100MHz)
+  *            D2 APB2 Prescaler              = 2 (APB2 Clock  100MHz)
+  *            D3 APB4 Prescaler              = 2 (APB4 Clock  100MHz)
+  *            HSE Frequency(Hz)              = 8000000
+  *            PLL_M                          = 4
+  *            PLL_N                          = 400
+  *            PLL_P                          = 2
+  *            PLL_Q                          = 4
+  *            PLL_R                          = 2
+  *            VDD(V)                         = 3.3
+  *            Flash Latency(WS)              = 4
+  * @param  None
+  * @retval None
+  */
+static void SystemClock_Config(void)
 {
-    SPI spi(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCK, PIN_SPI_CS);
+  RCC_ClkInitTypeDef RCC_ClkInitStruct;
+  RCC_OscInitTypeDef RCC_OscInitStruct;
+  HAL_StatusTypeDef ret = HAL_OK;
+  
+  /*!< Supply configuration update enable */
+  HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
 
-    printf("%p\r\n", &spi._peripheral->spi.spi);
+  /* The voltage scaling allows optimizing the power consumption when the device is
+     clocked below the maximum system frequency, to update the voltage scaling value
+     regarding system frequency refer to product datasheet.  */
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-    char tx_buf[1] = {0xFF};
-    char rx_buf[1];
+  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+  
+  /* Enable HSE Oscillator and activate PLL with HSE as source */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
+  RCC_OscInitStruct.HSIState = RCC_HSI_OFF;
+  RCC_OscInitStruct.CSIState = RCC_CSI_OFF;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
 
-    event_complete = false;
-    int tr = spi.transfer(tx_buf, 1, rx_buf, 1, callback_func);
-    printf("Started SPI transfer! %d\r\n", tr);
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 400;
+  RCC_OscInitStruct.PLL.PLLFRACN = 0;
+  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 4;
 
-    while(!event_complete);
+  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_1;
+  ret = HAL_RCC_OscConfig(&RCC_OscInitStruct);
+  if(ret != HAL_OK)
+  {
+    Error_Handler();
+  }
+  
+/* Select PLL as system clock source and configure  bus clocks dividers */
+  RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_D1PCLK1 | RCC_CLOCKTYPE_PCLK1 | \
+                                 RCC_CLOCKTYPE_PCLK2  | RCC_CLOCKTYPE_D3PCLK1);
 
-    printf("Event completed! %d\r\n", event_result);
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;  
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2; 
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2; 
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2; 
+  ret = HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4);
+  if(ret != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    while(1)
+}
+/**
+  * @brief  TxRx Transfer completed callback.
+  * @param  hspi: SPI handle
+  * @note   This example shows a simple way to report end of DMA TxRx transfer, and 
+  *         you can add your own implementation. 
+  * @retval None
+  */
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+  /* Turn LED1 on: Transfer in transmission process is complete */
+//   BSP_LED_On(LED1);
+  led_1 = true;
+  /* Turn LED2 on: Transfer in reception process is complete */
+//   BSP_LED_On(LED2);
+  led_2 = true;
+  wTransferState = TRANSFER_COMPLETE;
+}
+
+/**
+  * @brief  SPI error callbacks.
+  * @param  hspi: SPI handle
+  * @note   This example shows a simple way to report transfer error, and you can
+  *         add your own implementation.
+  * @retval None
+  */
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+  wTransferState = TRANSFER_ERROR;
+}
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @param  None
+  * @retval None
+  */
+static void Error_Handler(void)
+{
+//   BSP_LED_Off(LED1);
+  led_1 = false;
+  /* Turn LED3 on */
+//   BSP_LED_On(LED3);
+  led_3 = true;
+  while(1)
+  {
+  }
+}
+
+/**
+  * @brief  Compares two buffers.
+  * @param  pBuffer1, pBuffer2: buffers to be compared.
+  * @param  BufferLength: buffer's length
+  * @retval 0  : pBuffer1 identical to pBuffer2
+  *         >0 : pBuffer1 differs from pBuffer2
+  */
+static uint16_t Buffercmp(uint8_t* pBuffer1, uint8_t* pBuffer2, uint16_t BufferLength)
+{
+  while (BufferLength--)
+  {
+    if((*pBuffer1) != *pBuffer2)
     {
-        
+      return BufferLength;
     }
+    pBuffer1++;
+    pBuffer2++;
+  }
+
+  return 0;
 }
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t* file, uint32_t line)
+{ 
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+
+  /* Infinite loop */
+  while (1)
+  {
+  }
+}
+#endif
+
+/**
+  * @brief  CPU L1-Cache enable.
+  * @param  None
+  * @retval None
+  */
+static void CPU_CACHE_Enable(void)
+{
+  /* Enable I-Cache */
+  SCB_EnableICache();
+
+  /* Enable D-Cache */
+  SCB_EnableDCache();
+}
+
+/**
+  * @}
+  */
+
+/**
+  * @}
+  */
+
+/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+
+
+
+
+
+
+
+
+/**
+  * @brief   This function handles NMI exception.
+  * @param  None
+  * @retval None
+  */
+void NMI_Handler(void)
+{
+}
+
+/**
+  * @brief  This function handles Hard Fault exception.
+  * @param  None
+  * @retval None
+  */
+void HardFault_Handler(void)
+{
+  /* Go to infinite loop when Hard Fault exception occurs */
+  while (1)
+  {
+  }
+}
+
+/**
+  * @brief  This function handles Memory Manage exception.
+  * @param  None
+  * @retval None
+  */
+void MemManage_Handler(void)
+{
+  /* Go to infinite loop when Memory Manage exception occurs */
+  while (1)
+  {
+  }
+}
+
+/**
+  * @brief  This function handles Bus Fault exception.
+  * @param  None
+  * @retval None
+  */
+void BusFault_Handler(void)
+{
+  /* Go to infinite loop when Bus Fault exception occurs */
+  while (1)
+  {
+  }
+}
+
+/**
+  * @brief  This function handles Usage Fault exception.
+  * @param  None
+  * @retval None
+  */
+void UsageFault_Handler(void)
+{
+  /* Go to infinite loop when Usage Fault exception occurs */
+  while (1)
+  {
+  }
+}
+
+/**
+  * @brief  This function handles Debug Monitor exception.
+  * @param  None
+  * @retval None
+  */
+void DebugMon_Handler(void)
+{
+}
+
+/******************************************************************************/
+/*                 STM32H7xx Peripherals Interrupt Handlers                   */
+/*  Add here the Interrupt Handler for the used peripheral(s) (PPP), for the  */
+/*  available peripheral interrupt handler's name please refer to the startup */
+/*  file (startup_stm32h7xx.s).                                               */
+/******************************************************************************/
+/**
+  * @brief  This function handles DMA Rx interrupt request.
+  * @param  None
+  * @retval None
+  */
+void SPIx_DMA_RX_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(SpiHandle.hdmarx);
+}
+
+/**
+  * @brief  This function handles DMA Tx interrupt request.
+  * @param  None
+  * @retval None
+  */
+void SPIx_DMA_TX_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(SpiHandle.hdmatx);
+}
+
+/**
+  * @brief  This function handles SPIx interrupt request.
+  * @param  None
+  * @retval None
+  */
+void SPIx_IRQHandler(void)
+{
+  HAL_SPI_IRQHandler(&SpiHandle);
+}
+
+/**
+  * @brief  This function handles PPP interrupt request.
+  * @param  None
+  * @retval None
+  */
+/*void PPP_IRQHandler(void)
+{
+}*/
