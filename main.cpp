@@ -129,7 +129,7 @@ int main(void)
 #ifdef MASTER_BOARD
   /* Configure User push-button button */
 //   BSP_PB_Init(BUTTON_USER,BUTTON_MODE_GPIO);
-  DigitalIn user_button(USER_BUTTON);
+  DigitalIn user_button(BUTTON1);
   /* Wait for User push-button press before starting the Communication */
   while (!user_button)
   {

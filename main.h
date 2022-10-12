@@ -21,8 +21,6 @@
 #ifndef __MAIN_H
 #define __MAIN_H
 
-#define USE_HAL_SPI_REGISTER_CALLBACKS 1UL
-
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx.h"
 
